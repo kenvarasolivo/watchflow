@@ -1,8 +1,8 @@
 import Link from "next/link";
 
+import { Capabilities } from "@/components/landing/Capabilities";
 import { ClosingCta } from "@/components/landing/ClosingCta";
 import { Features } from "@/components/landing/Features";
-import { FingerprintNote } from "@/components/landing/FingerprintNote";
 import { Hero } from "@/components/landing/Hero";
 import { HowItWorks } from "@/components/landing/HowItWorks";
 import { LiveBoard } from "@/components/landing/LiveBoard";
@@ -49,7 +49,7 @@ export default async function LandingPage() {
       )}
 
       <HowItWorks />
-      <FingerprintNote />
+      <Capabilities />
       <Features />
       <ClosingCta />
     </>

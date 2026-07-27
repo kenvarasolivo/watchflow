@@ -17,7 +17,7 @@ function Underline() {
       aria-hidden="true"
       viewBox="0 0 300 12"
       preserveAspectRatio="none"
-      className="absolute -bottom-1 left-0 h-[0.32em] w-full text-leaf"
+      className="absolute -bottom-1 left-0 h-[0.3em] w-full text-leaf"
     >
       <path
         d="M2 8.5c58-5 108-6.5 148-5.5s78 3.5 148 6"
@@ -52,13 +52,17 @@ const STATUS_LABEL: Record<PipelineStatus["status"], string> = {
  * viewport, before any of it has been described. It is also the honest version
  * of a hero screenshot — a real row from `pipeline_runs` rather than a mockup
  * that will never be wrong because it was never true.
+ *
+ * Deliberately short: the run has ten columns, and printing all of them turns
+ * the one panel in the first viewport into a form. The four that change the
+ * reading of the number above them are here; /pipeline has the rest.
  */
 function RunReceipt({ run }: { run: PipelineStatus | null }) {
   if (!run) {
     return (
-      <div className="rounded-2xl border border-dashed border-baseline bg-subtle p-6">
+      <div className="rounded-3xl border border-dashed border-baseline bg-subtle p-7 sm:p-8">
         <p className="eyebrow">Last run</p>
-        <p className="mt-3 text-sm leading-relaxed text-ink-secondary">
+        <p className="mt-4 text-sm leading-relaxed text-ink-secondary">
           No run recorded yet. Once the pipeline executes once, its result appears here — and
           on every other page — as the definition of how fresh the numbers are.
         </p>
@@ -68,42 +72,50 @@ function RunReceipt({ run }: { run: PipelineStatus | null }) {
 
   const rows: [string, string, string?][] = [
     ["status", STATUS_LABEL[run.status], STATUS_TONE[run.status]],
-    ["started", formatDateTime(run.startedAt)],
-    ["duration", runDuration(run)],
     ["tickers", String(run.tickersProcessed)],
-    ["rows upserted", run.rowsUpserted.toLocaleString()],
-    ["rows rejected", run.rowsRejected.toLocaleString(), run.rowsRejected > 0 ? "text-loss" : undefined],
-    ["trigger", run.trigger],
+    [
+      "rejected",
+      run.rowsRejected.toLocaleString(),
+      run.rowsRejected > 0 ? "text-loss" : undefined,
+    ],
+    ["duration", runDuration(run)],
   ];
 
   return (
     <Link
       href="/pipeline"
-      className="group block rounded-2xl border border-hairline bg-canvas p-6 shadow-[0_1px_2px_rgba(10,10,10,0.04)] transition-all hover:-translate-y-0.5 hover:border-baseline hover:shadow-[0_12px_32px_rgba(10,10,10,0.08)] focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 focus-visible:outline-none"
+      className="group block rounded-3xl border border-hairline bg-canvas p-7 shadow-[0_1px_2px_rgba(10,10,10,0.04)] transition-all hover:-translate-y-0.5 hover:border-baseline hover:shadow-[0_16px_44px_rgba(10,10,10,0.09)] focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 focus-visible:outline-none sm:p-8"
     >
       <div className="flex items-baseline justify-between">
         <span className="eyebrow">Last pipeline run</span>
         <span className="num text-xs text-ink-muted">#{run.id}</span>
       </div>
 
-      <dl className="mt-5 flex flex-col gap-0">
+      {/* The headline figure of the whole panel. Everything under it is context
+          for this number, so it is the only thing set at display size. */}
+      <p className="num-hero mt-6 text-5xl font-medium text-ink sm:text-6xl">
+        {run.rowsUpserted.toLocaleString()}
+      </p>
+      <p className="mt-2 text-sm text-ink-secondary">rows upserted</p>
+
+      <dl className="mt-7 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-grid pt-6">
         {rows.map(([label, value, tone]) => (
-          <div
-            key={label}
-            className="flex items-baseline justify-between gap-4 border-b border-grid py-2.5 last:border-b-0"
-          >
+          <div key={label}>
             <dt className="text-xs text-ink-muted">{label}</dt>
-            <dd className={`num text-right text-xs ${tone ?? "text-ink"}`}>{value}</dd>
+            <dd className={`num mt-1 text-sm ${tone ?? "text-ink"}`}>{value}</dd>
           </div>
         ))}
       </dl>
 
-      <p className="mt-5 flex items-center gap-2 text-xs font-medium text-leaf">
-        Every run, including the failures
-        <span aria-hidden="true" className="transition-transform group-hover:translate-x-1">
-          →
+      <div className="mt-7 flex items-center justify-between gap-4 border-t border-grid pt-5">
+        <span className="num text-xs text-ink-muted">{formatDateTime(run.startedAt)}</span>
+        <span className="flex items-center gap-2 text-xs font-medium text-leaf">
+          Full run log
+          <span aria-hidden="true" className="transition-transform group-hover:translate-x-1">
+            →
+          </span>
         </span>
-      </p>
+      </div>
     </Link>
   );
 }
@@ -122,14 +134,18 @@ export function Hero({ run }: { run: PipelineStatus | null }) {
   return (
     // `isolate` matters: without a stacking context here, the -z-10 backdrop
     // below paints behind the body background and is invisible.
-    <section className="relative isolate overflow-hidden">
+    //
+    // The min-height claims the viewport under the 4rem header on large screens
+    // so the first screen is the hero and nothing else. It is a floor, not a
+    // fixed height — the section still grows if the receipt runs long.
+    <section className="relative isolate flex items-center overflow-hidden lg:min-h-[calc(100dvh-4rem)]">
       <div aria-hidden="true" className="grid-veil absolute inset-0 -z-10" />
 
-      <div className="shell grid items-center gap-12 pt-14 pb-14 sm:pt-20 sm:pb-20 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.75fr)] lg:gap-16">
+      <div className="shell grid w-full items-center gap-14 pt-16 pb-20 sm:pt-24 sm:pb-28 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.72fr)] lg:gap-20 lg:py-24">
         <div>
           <PipelineBadge run={run} />
 
-          <h1 className="display-xl mt-7 text-[clamp(2.6rem,6.2vw,4.75rem)] text-ink">
+          <h1 className="display-xl mt-8 text-[clamp(3rem,7.2vw,5.5rem)] text-ink">
             A watchlist that{" "}
             <span className="relative inline-block whitespace-nowrap">
               shows its work.
@@ -137,29 +153,28 @@ export function Hero({ run }: { run: PipelineStatus | null }) {
             </span>
           </h1>
 
-          <p className="mt-7 max-w-xl text-lg leading-relaxed text-ink-secondary">
-            Watchflow tracks end-of-day prices for the tickers you care about — and puts the ETL
-            job that fetches them on screen, right next to the numbers it produced. Every close,
-            every moving average, and every run that went wrong.
+          <p className="mt-8 max-w-xl text-lg leading-relaxed text-ink-secondary sm:text-xl">
+            Daily OHLCV for every ticker you track, loaded by a scheduled ETL job that publishes
+            its own run log right next to the numbers it produced.
           </p>
 
-          <div className="mt-9 flex flex-wrap items-center gap-3">
+          <div className="mt-10 flex flex-wrap items-center gap-3">
             <Link
               href="/watchlist"
-              className="rounded-full bg-ink px-6 py-3 text-base font-medium text-canvas transition-colors hover:bg-ink-secondary focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 focus-visible:outline-none"
+              className="rounded-full bg-ink px-7 py-3.5 text-base font-medium text-canvas transition-colors hover:bg-ink-secondary focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 focus-visible:outline-none"
             >
               Open the dashboard
             </Link>
             <Link
               href="/pipeline"
-              className="rounded-full border border-hairline bg-canvas px-6 py-3 text-base font-medium text-ink transition-colors hover:border-baseline hover:bg-subtle focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 focus-visible:outline-none"
+              className="rounded-full border border-hairline bg-canvas px-7 py-3.5 text-base font-medium text-ink transition-colors hover:border-baseline hover:bg-subtle focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 focus-visible:outline-none"
             >
               Read the run log
             </Link>
           </div>
 
-          <p className="mt-6 text-sm text-ink-muted">
-            No accounts. Reads are public. Prices are end-of-day, never real time.
+          <p className="mt-7 text-sm text-ink-muted">
+            No accounts. Prices are end-of-day, never real time.
           </p>
         </div>
 
