@@ -145,8 +145,13 @@ export function Hero({ run }: { run: PipelineStatus | null }) {
         <div>
           <PipelineBadge run={run} />
 
-          <h1 className="display-xl mt-8 text-[clamp(3rem,7.2vw,5.5rem)] text-ink">
-            A watchlist that{" "}
+          {/* The brand leads the sentence rather than sitting only in the header
+              wordmark, so a screenshot of the hero alone still says whose
+              product this is. The size ceiling is lower than the phrase-only
+              version this replaced — the line is half again as long, and at
+              5.5rem it took four lines out of the first viewport. */}
+          <h1 className="display-xl mt-8 text-[clamp(2.75rem,6.4vw,4.75rem)] text-ink">
+            Watchflow is a watchlist that{" "}
             <span className="relative inline-block whitespace-nowrap">
               shows its work.
               <Underline />
