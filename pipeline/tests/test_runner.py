@@ -1,5 +1,8 @@
 from datetime import date
 
+from sqlalchemy.dialects.postgresql import ENUM
+
+from watchflow_pipeline import db
 from watchflow_pipeline.config import Settings
 from watchflow_pipeline.runner import RunResult, _process_ticker, _resolve_status
 
@@ -86,6 +89,12 @@ class TestRejectionClassification:
 
         assert result.errors == []
         assert any("2026-07-21" in note for note in result.notes)
+
+
+class TestPipelineStatusTyping:
+    def test_pipeline_run_status_uses_native_postgres_enum(self):
+        assert isinstance(db.pipeline_runs.c.status.type, ENUM)
+        assert db.pipeline_runs.c.status.type.name == "pipeline_status"
 
 
 class TestResolveStatus:

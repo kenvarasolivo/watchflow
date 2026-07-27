@@ -27,7 +27,7 @@ from sqlalchemy import (
     func,
     select,
 )
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.postgresql import ENUM, insert as pg_insert
 from sqlalchemy.engine import Connection, Engine
 
 metadata = MetaData()
@@ -82,7 +82,17 @@ pipeline_runs = Table(
     Column("tickers_processed", Integer),
     Column("rows_upserted", Integer),
     Column("rows_rejected", Integer),
-    Column("status", Text),
+    Column(
+        "status",
+        ENUM(
+            "running",
+            "success",
+            "partial_failure",
+            "failed",
+            name="pipeline_status",
+            create_type=False,
+        ),
+    ),
     Column("error_summary", Text),
     Column("details", Text),
     Column("trigger", String(32)),
