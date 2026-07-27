@@ -1,0 +1,21 @@
+[project]
+name = "watchflow-pipeline"
+version = "1.0.0"
+description = "Scheduled extract/transform/load pipeline feeding the Watchflow dashboard."
+requires-python = ">=3.11"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["watchflow_pipeline*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+filterwarnings = [
+    # yfinance/pandas emit deprecation noise we do not control.
+    "ignore::DeprecationWarning",
+    "ignore::FutureWarning",
+]

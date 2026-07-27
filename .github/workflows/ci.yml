@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  pipeline-tests:
+    name: Pipeline tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pipeline
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pipeline/requirements-dev.txt
+
+      - run: pip install -r requirements-dev.txt
+
+      # The round-trip idempotency tests skip themselves unless
+      # WATCHFLOW_TEST_DATABASE_URL points at a migrated Postgres. The
+      # SQL-level upsert assertions always run.
+      - run: pytest -q
+
+  web-build:
+    name: Web typecheck and build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm run lint
+
+      # Every page is `force-dynamic`, so the build never connects to Postgres
+      # and needs no DATABASE_URL here.
+      - run: npm run build

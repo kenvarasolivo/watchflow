@@ -1,0 +1,17 @@
+# Yahoo Finance client. Pinned to a line that accepts an externally supplied
+# curl_cffi session — see watchflow_pipeline/extract.py and the README section
+# "The TLS fingerprint problem".
+yfinance>=0.2.65,<0.3
+
+# The whole reason this pipeline works from a datacenter IP: curl_cffi speaks
+# TLS with a real browser's ClientHello (JA3/JA4) instead of Python's.
+curl_cffi>=0.7.0,<0.14
+
+# Row-level schema validation before anything reaches Postgres.
+pydantic>=2.7,<3
+
+# Core-only usage: the pipeline issues DML against tables that Drizzle owns.
+SQLAlchemy>=2.0.30,<3
+psycopg[binary]>=3.1.18,<4
+
+pandas>=2.2,<3

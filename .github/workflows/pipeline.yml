@@ -1,0 +1,86 @@
+name: Run pipeline
+
+# The scheduled, unattended half of Watchflow. This workflow is the only thing
+# that writes price data — the Next.js app never fetches from Yahoo at request
+# time, it only reads what this has already loaded.
+
+on:
+  schedule:
+    # 22:00 UTC on weekdays. The US market closes at 21:00 UTC (EDT) or 22:00
+    # UTC (EST), so this lands after the close in summer and right on it in
+    # winter; the following day's run refetches the overlap window either way,
+    # so a winter run that catches an unsettled bar self-heals rather than
+    # storing a partial close permanently.
+    #
+    # Note GitHub queues cron workflows on a best-effort basis and delays of
+    # 10–60 minutes at the top of the hour are normal. That is fine here — the
+    # pipeline is idempotent, so a late run is simply a run.
+    - cron: "0 22 * * 1-5"
+
+  workflow_dispatch:
+    inputs:
+      full_refresh:
+        description: "Refetch full history for every ticker (needed after a stock split)"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Extract and transform only — write nothing"
+        type: boolean
+        default: false
+
+# Two pipeline runs writing at once would still be correct thanks to the
+# upserts, but they would double the load on Yahoo for no benefit.
+concurrency:
+  group: watchflow-pipeline
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  etl:
+    name: Extract, transform, load
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        working-directory: pipeline
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pipeline/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run pipeline
+        env:
+          # GitHub Actions runners are datacenter IPs, which is exactly the
+          # environment where Yahoo Finance blocks default TLS fingerprints.
+          # curl_cffi's browser impersonation is what makes this step work at
+          # all — see the README section "The TLS fingerprint problem".
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          WATCHFLOW_IMPERSONATE: ${{ vars.WATCHFLOW_IMPERSONATE || 'chrome' }}
+          WATCHFLOW_TRIGGER: ${{ github.event_name }}
+        run: |
+          python -m watchflow_pipeline \
+            ${{ inputs.full_refresh && '--full-refresh' || '' }} \
+            ${{ inputs.dry_run && '--dry-run' || '' }}
+
+      - name: Explain a non-zero exit
+        if: failure()
+        run: |
+          echo "::notice::The pipeline exits non-zero for partial_failure as well as"
+          echo "::notice::outright failure — data that was fetched and then rejected is"
+          echo "::notice::a real loss and should not show up as a green run."
+          echo "::notice::Open /pipeline in the deployed app for the per-ticker run log."

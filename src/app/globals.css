@@ -1,0 +1,103 @@
+@import "tailwindcss";
+
+/*
+ * Watchflow is a deliberately single-mode (dark) surface — a financial console,
+ * not a document. There is no light theme to swap to, so tokens are declared
+ * once on :root rather than duplicated under a prefers-color-scheme block.
+ *
+ * The two categorical series hues and the gain/loss status pair were validated
+ * against the chart surface (#101317) with the data-viz palette validator:
+ *
+ *   categorical  #d95926, #3987e5   → all-pairs PASS
+ *                (lightness band, chroma floor, CVD ΔE 26.8, normal ΔE 31.8,
+ *                 contrast ≥ 3:1)
+ *   status       #0fb3a1, #e5484d   → CVD ΔE 11.4, normal ΔE 31.6, contrast ≥ 3:1
+ *
+ * The close-price line intentionally does NOT take a categorical slot: it is
+ * the subject of the chart and carries emphasis (primary ink, 2px) while the
+ * moving averages recede into the two validated hues at 1.5px. Keeping green
+ * out of the price chart entirely means teal reads only as "gain", nowhere else.
+ */
+
+@theme {
+  --color-plane: #0a0b0d;
+  --color-surface: #101317;
+  --color-elevated: #161a20;
+
+  --color-ink: #f2f4f6;
+  --color-ink-secondary: #a8b0ba;
+  --color-ink-muted: #6b7480;
+
+  --color-grid: #1e232a;
+  --color-baseline: #2a313a;
+  --color-hairline: #232931;
+
+  /* Status — gain/loss. Reserved; never reused as a series identity. */
+  --color-gain: #0fb3a1;
+  --color-loss: #e5484d;
+
+  /* Categorical series slots (moving averages). */
+  --color-series-ma20: #d95926;
+  --color-series-ma50: #3987e5;
+
+  /* Supporting single-series mark (volume bars) — neutral by design so it
+     never competes with the categorical slots or the gain/loss tokens. */
+  --color-mark-neutral: #47525f;
+
+  --font-display: var(--font-bebas), "Arial Narrow", sans-serif;
+  --font-mono: var(--font-dm-mono), ui-monospace, "SFMono-Regular", monospace;
+  --font-sans: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background-color: var(--color-plane);
+  color: var(--color-ink);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Headings use Bebas Neue, which is all-caps by design and sits tight. */
+.display {
+  font-family: var(--font-display);
+  letter-spacing: 0.04em;
+  line-height: 0.95;
+}
+
+/*
+ * Every numeric column in a table must align vertically, so tabular figures are
+ * the default for `.num`. Large standalone stat values deliberately opt out via
+ * `.num-hero` — equal-width digits make a display-size number look loose.
+ */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.num-hero {
+  font-family: var(--font-mono);
+  font-variant-numeric: normal;
+}
+
+/* Recharts injects focus outlines on the wrapper; we manage focus ourselves. */
+.recharts-wrapper:focus,
+.recharts-surface:focus {
+  outline: none;
+}
+
+::selection {
+  background-color: color-mix(in oklab, var(--color-gain) 35%, transparent);
+}
+
+/* Scrollbars, so horizontal table overflow doesn't look like a rendering bug. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-baseline) transparent;
+}
