@@ -1,0 +1,1 @@
+ALTER TABLE "watchlist_tickers" ADD COLUMN "name" varchar(128);

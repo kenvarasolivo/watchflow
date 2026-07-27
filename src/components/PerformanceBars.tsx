@@ -13,6 +13,7 @@ import {
 } from "recharts";
 
 import type { PerformanceRow } from "@/db/queries";
+import { companyName } from "@/lib/companies";
 import { RANGE_LABELS, type Range } from "@/lib/range";
 import { formatPercent } from "@/lib/format";
 
@@ -30,7 +31,7 @@ export function PerformanceBars({ rows, range }: { rows: PerformanceRow[]; range
 
   if (data.length === 0) {
     return (
-      <div className="rounded border border-dashed border-hairline bg-surface px-6 py-12 text-center text-sm text-ink-muted">
+      <div className="rounded-2xl border border-dashed border-baseline bg-subtle px-6 py-12 text-center text-sm text-ink-secondary">
         No ticker has enough price history in the {RANGE_LABELS[range]} window to compute a
         return yet.
       </div>
@@ -38,12 +39,12 @@ export function PerformanceBars({ rows, range }: { rows: PerformanceRow[]; range
   }
 
   // Horizontal bars: one row per ticker, sized so labels never crowd.
-  const height = Math.max(160, data.length * 34 + 48);
+  const height = Math.max(160, data.length * 38 + 48);
 
   return (
-    <figure className="m-0 rounded border border-hairline bg-surface p-4">
-      <figcaption className="sr-only">
-        Percentage return per ticker over the {RANGE_LABELS[range]} window, best to worst.
+    <figure className="m-0 rounded-2xl border border-hairline bg-canvas p-5">
+      <figcaption className="mb-4 eyebrow">
+        {RANGE_LABELS[range]} return by ticker — best to worst
       </figcaption>
       <div style={{ height }} className="w-full">
         <ResponsiveContainer width="100%" height="100%">
@@ -64,21 +65,21 @@ export function PerformanceBars({ rows, range }: { rows: PerformanceRow[]; range
             <YAxis
               type="category"
               dataKey="ticker"
-              width={64}
-              tick={{ fill: "var(--color-ink-secondary)", fontSize: 12, fontFamily: "var(--font-mono)" }}
+              width={68}
+              tick={{ fill: "var(--color-ink)", fontSize: 12, fontFamily: "var(--font-mono)" }}
               tickLine={false}
               axisLine={false}
             />
             <ReferenceLine x={0} stroke="var(--color-baseline)" strokeWidth={1} />
             <Tooltip
               content={<PerformanceTooltip range={range} />}
-              cursor={{ fill: "var(--color-elevated)" }}
+              cursor={{ fill: "var(--color-sunken)" }}
               isAnimationActive={false}
             />
             <Bar
               dataKey="returnPct"
               name="Return"
-              radius={[2, 2, 2, 2]}
+              radius={[3, 3, 3, 3]}
               isAnimationActive={false}
               label={{
                 position: "right",
@@ -115,11 +116,13 @@ function PerformanceTooltip({
 }) {
   if (!active || !payload || payload.length === 0) return null;
   const row = payload[0].payload;
+  const name = companyName(row.ticker, row.name);
 
   return (
-    <div className="rounded border border-hairline bg-elevated px-3 py-2 text-xs shadow-lg">
-      <p className="num mb-1.5 tracking-wider text-ink">{row.ticker}</p>
-      <dl className="grid grid-cols-[auto_auto] gap-x-4 gap-y-1">
+    <div className="rounded-xl border border-hairline bg-canvas px-3.5 py-2.5 text-xs shadow-[0_8px_24px_rgba(10,10,10,0.10)]">
+      <p className="num font-medium text-ink">{row.ticker}</p>
+      {name && <p className="mb-2 text-ink-muted">{name}</p>}
+      <dl className={`grid grid-cols-[auto_auto] gap-x-5 gap-y-1 ${name ? "" : "mt-2"}`}>
         <dt className="text-ink-muted">{RANGE_LABELS[range]} return</dt>
         <dd
           className={`num text-right ${

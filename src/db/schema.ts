@@ -62,6 +62,14 @@ export const watchlistTickers = pgTable(
       .notNull()
       .references(() => watchlists.id, { onDelete: "cascade" }),
     ticker: varchar("ticker", { length: 16 }).notNull(),
+    /**
+     * Company name as resolved from Yahoo's search endpoint when the ticker was
+     * added. Nullable on purpose: that lookup is best-effort (see `lib/yahoo.ts`)
+     * and rows seeded before this column existed have nothing to backfill from.
+     * `lib/companies.ts` covers the gap at render time, so a null here degrades
+     * to a local name rather than to a bare symbol.
+     */
+    name: varchar("name", { length: 128 }),
     addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

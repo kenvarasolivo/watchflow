@@ -1,0 +1,135 @@
+import Link from "next/link";
+
+import { Delta } from "@/components/Delta";
+import { Sparkline } from "@/components/Sparkline";
+import type { PipelineStatus, WatchlistRow } from "@/db/queries";
+import { companyName } from "@/lib/companies";
+import { formatPrice, formatRelative } from "@/lib/format";
+
+/**
+ * Live proof, placed before any marketing claim gets made.
+ *
+ * The cards are the four largest absolute moves in the last session, which is
+ * the only ranking that is interesting without knowing the reader's positions.
+ * When no ticker has a return yet — a fresh database, or a watchlist added
+ * between runs — it falls back to the first four rows rather than rendering an
+ * empty grid, because "nothing moved" and "nothing loaded" must not look alike.
+ */
+export function LiveBoard({
+  rows,
+  run,
+  tickerCount,
+}: {
+  rows: WatchlistRow[];
+  run: PipelineStatus | null;
+  tickerCount: number;
+}) {
+  const withReturns = rows.filter((row) => row.dailyReturn !== null && row.close !== null);
+
+  const movers = (
+    withReturns.length > 0
+      ? [...withReturns].sort(
+          (a, b) => Math.abs(b.dailyReturn ?? 0) - Math.abs(a.dailyReturn ?? 0),
+        )
+      : rows
+  ).slice(0, 4);
+
+  if (movers.length === 0) return null;
+
+  const stats: { label: string; value: string; hint: string }[] = [
+    {
+      label: "Tickers tracked",
+      value: String(tickerCount),
+      hint: "Union of every watchlist",
+    },
+    {
+      label: "Rows in the last run",
+      value: run ? run.rowsUpserted.toLocaleString() : "—",
+      hint: "Upserted, not inserted",
+    },
+    {
+      label: "Rows rejected",
+      value: run ? run.rowsRejected.toLocaleString() : "—",
+      hint: run && run.rowsRejected > 0 ? "Logged with a reason" : "Clean run",
+    },
+    {
+      label: "Data updated",
+      value: run ? formatRelative(run.finishedAt ?? run.startedAt) : "never",
+      hint: "After the US close, weekdays",
+    },
+  ];
+
+  return (
+    <section className="shell py-16 sm:py-24">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="eyebrow">Live from the last run</p>
+          <h2 className="display mt-3 max-w-xl text-3xl text-ink sm:text-4xl">
+            {withReturns.length > 0
+              ? "Biggest moves in the last session."
+              : "Tracked and waiting on the next run."}
+          </h2>
+        </div>
+        <Link
+          href="/watchlist"
+          className="w-fit rounded-full border border-hairline px-5 py-2.5 text-sm font-medium text-ink transition-colors hover:border-baseline hover:bg-subtle focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 focus-visible:outline-none"
+        >
+          See all {tickerCount} tickers
+        </Link>
+      </div>
+
+      <ul className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {movers.map((row) => {
+          const name = companyName(row.ticker, row.name);
+
+          return (
+            <li key={row.ticker}>
+              <Link
+                href={`/ticker/${encodeURIComponent(row.ticker)}`}
+                className="group flex h-full flex-col rounded-2xl border border-hairline bg-canvas p-5 transition-all hover:-translate-y-0.5 hover:border-baseline hover:shadow-[0_8px_28px_rgba(10,10,10,0.07)] focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 focus-visible:outline-none"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="num font-medium tracking-wide text-ink">{row.ticker}</p>
+                    <p className="mt-0.5 truncate text-xs text-ink-muted">
+                      {name ?? "Company name unavailable"}
+                    </p>
+                  </div>
+                  <Delta value={row.dailyReturn} variant="pill" className="shrink-0 text-xs" />
+                </div>
+
+                <p className="num-hero mt-5 text-2xl font-medium text-ink">
+                  {row.close === null ? "—" : formatPrice(row.close)}
+                </p>
+
+                <div className="mt-4">
+                  <Sparkline
+                    values={row.sparkline}
+                    label={row.ticker}
+                    width={240}
+                    height={52}
+                    className="h-auto w-full overflow-visible"
+                  />
+                </div>
+
+                <p className="num mt-4 text-[0.6875rem] text-ink-muted">
+                  as of {row.lastDate ?? "—"}
+                </p>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+
+      <dl className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {stats.map((stat) => (
+          <div key={stat.label} className="rounded-2xl bg-subtle px-5 py-4">
+            <dt className="eyebrow">{stat.label}</dt>
+            <dd className="num-hero mt-2 text-xl font-medium text-ink">{stat.value}</dd>
+            <dd className="mt-1 text-xs text-ink-muted">{stat.hint}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}

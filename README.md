@@ -306,7 +306,7 @@ would exist only as a comment.
 
 ```
 watchlists          id · name (unique) · created_at
-watchlist_tickers   (watchlist_id → watchlists.id, ticker) PK · added_at
+watchlist_tickers   (watchlist_id → watchlists.id, ticker) PK · name · added_at
 prices              (ticker, date) PK · open · high · low · close · volume · updated_at
 metrics             (ticker, date) PK · daily_return · ma_20 · ma_50 · volatility_30d · updated_at
 pipeline_runs       id · started_at · finished_at · tickers_processed · rows_upserted
@@ -320,6 +320,17 @@ query, so the browser still receives real numbers rather than strings.
 The extract set is defined as the **union of all watchlists' tickers**. v1 has
 exactly one watchlist, but writing it this way means adding more later needs no
 pipeline change.
+
+`watchlist_tickers.name` holds the company name (`AAPL` → `Apple Inc.`) as
+resolved from Yahoo's search endpoint when the ticker was added. It is nullable
+and **only ever written on a definitive match** — an `unknown` lookup means
+Yahoo was unreachable, not that the company is nameless, and storing a guess
+would make the column indistinguishable from the local fallback table it is
+supposed to outrank. Rendering falls back to
+[`src/lib/companies.ts`](src/lib/companies.ts), which covers the US large caps,
+the major ETFs and indices, the liquid crypto pairs and the European blue chips,
+so rows seeded before the column existed — and ticker pages for symbols that
+were never on the watchlist — still show a name rather than a bare symbol.
 
 ---
 
@@ -337,8 +348,13 @@ Reads are public. Writes are gated by a shared secret when
 | `GET /api/watchlist/performance?range=30d\|90d\|1y` | Window return per ticker, best to worst |
 | `GET /api/pipeline/status` | Latest run, for the freshness badge |
 
-Pages: `/` (watchlist), `/ticker/[symbol]` (detail), `/performance` (ranked
-comparison), `/pipeline` (run log).
+Pages: `/` (landing), `/watchlist` (the list), `/ticker/[symbol]` (detail),
+`/performance` (ranked comparison), `/pipeline` (run log).
+
+The landing page reads the database but does **not** fail with it: if Postgres
+is unreachable, the live ticker strip and last-run figures are replaced by a
+notice and the rest of the page still renders. The app pages behind it show the
+full setup notice with the underlying error.
 
 **Ticker validation is deliberately three-valued.** `POST /api/watchlist` checks
 the symbol against Yahoo's search endpoint, which returns `valid`, `invalid` or
@@ -426,6 +442,11 @@ Full annotated list in [`.env.example`](.env.example). The essentials:
 Every page is `force-dynamic`, so the build never touches Postgres and a
 misconfigured env var surfaces as a clear in-app setup notice rather than a
 failed build.
+
+> **Upgrading an existing deployment:** run `npm run db:migrate` once to apply
+> `drizzle/0001_*.sql`, which adds the nullable `watchlist_tickers.name` column.
+> It is additive and changes no existing data, but the read queries select the
+> column, so the app reports `column "name" does not exist` until it is applied.
 
 > **Set `WATCHFLOW_WRITE_TOKEN` on any public deployment.** Without it, anyone
 > who finds the URL can edit the watchlist. Generate one with
@@ -536,22 +557,45 @@ Choices worth stating, with the reasoning rather than just the outcome:
 
 ### Visual design
 
-Dark, data-dense, single-mode by intent — a financial console, not a document.
-Bebas Neue headings, DM Mono for every figure, tabular figures in tables and
-proportional ones for large standalone stats.
+Light, single-mode by intent: a white page, near-black type set heavy and tight,
+and colour only where it carries meaning. Inter Tight for headings, Inter for
+prose, DM Mono for every figure — tabular figures in tables, proportional ones
+for large standalone stats.
 
-The chart palette is **validated, not eyeballed**. The two categorical series
-hues (MA-20 `#d95926`, MA-50 `#3987e5`) and the gain/loss status pair
-(`#0fb3a1` / `#e5484d`) were checked against the chart surface for the lightness
-band, chroma floor, colour-vision-deficiency separation, normal-vision
-separation, and contrast — all pass all-pairs. The close-price line deliberately
-takes *no* categorical slot: it is the subject of the chart and carries emphasis
-(primary ink, 2px) while the averages recede at 1.5px. Keeping green out of the
-price chart entirely means teal reads only as "gain", nowhere else.
+**One accent, and it is not the button colour.** The accent is a deep leaf green
+(`#0b6b3a`). Primary actions are solid ink, which leaves green free to mean
+exactly two things: the brand mark, and "up". A green CTA sitting beside a green
+`+1.24%` would make the colour ambiguous at the only moment it matters.
 
-Colour never carries meaning alone: deltas ship with an arrow glyph and an
-explicit sign, the performance bars are directly labelled, and every chart has a
-table view.
+The palette is **measured, not eyeballed** — every token against all three
+surfaces it can land on (`#ffffff`, `#f6f7f8`, `#f0f2f4`):
+
+| Role | Token | Contrast on white |
+|---|---|---|
+| Primary ink | `#0a0a0a` | 19.8:1 |
+| Secondary ink | `#4b5563` | 7.6:1 |
+| Muted ink | `#6b7280` | 4.8:1 |
+| Gain | `#0b6b3a` | 6.6:1 |
+| Loss | `#b42318` | 6.6:1 |
+| MA-20 | `#c2410c` | 5.2:1 |
+| MA-50 | `#1d4ed8` | 6.7:1 |
+| Volume bars | `#828c99` | 3.4:1 |
+
+Two separation results shaped the rules rather than just the values:
+
+- **gain vs loss** separates by ΔE 26.6 for normal vision but only **7.8 under
+  deuteranopia**. That is not fixed by picking different reds and greens; it is
+  fixed by never letting colour carry the sign alone. Every delta ships an arrow
+  glyph and an explicit `+`/`−`, the performance bars are directly labelled, and
+  every chart has a table view.
+- **MA-20 orange collapses onto gain green under protanopia** (ΔE 4.7). So green
+  stays out of the price chart entirely. The close line is ink and carries the
+  emphasis at 2px; the two averages recede into the validated categorical hues
+  (ΔE 36.6 normal / 34.6 deuteranopia / 30.4 protanopia) at 1.5px.
+
+The landing page's ink band is the only inverted surface in the app. gain/loss
+measure under 2:1 on `#0a0a0a`, so that one section takes a lighter pair
+(`#4ade80` / `#fca5a5`, 10.6:1 and 9.7:1) used nowhere else.
 
 There is no dual-axis chart anywhere. Volume sits in its own plot beneath the
 price chart sharing the x-axis, because aligning two y-scales on one plot

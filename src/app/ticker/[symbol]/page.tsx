@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -6,12 +7,37 @@ import { PriceChart } from "@/components/PriceChart";
 import { RangeTabs } from "@/components/RangeTabs";
 import { SetupNotice } from "@/components/SetupNotice";
 import { StatTile } from "@/components/StatTile";
-import { getTickerSeries } from "@/db/queries";
+import { getTickerName, getTickerSeries } from "@/db/queries";
+import { companyName } from "@/lib/companies";
 import { formatPercent, formatPrice } from "@/lib/format";
 import { RANGE_LABELS, parseRange } from "@/lib/range";
 import { normaliseTicker } from "@/lib/ticker";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * The tab title is the one place the name is worth spelling out in full even
+ * when it is long — a row of browser tabs reading AAPL / MSFT / NVDA is exactly
+ * the situation the name was added to fix.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ symbol: string }>;
+}): Promise<Metadata> {
+  const normalised = normaliseTicker(decodeURIComponent((await params).symbol));
+  if (!normalised.ok) return { title: "Unknown symbol" };
+
+  // The stored name is a nice-to-have here; a failed lookup must not take the
+  // page down with it, so metadata falls back to the local table.
+  const stored = await getTickerName(normalised.ticker).catch(() => null);
+  const name = companyName(normalised.ticker, stored);
+
+  return {
+    title: name ? `${normalised.ticker} — ${name}` : normalised.ticker,
+    description: `Daily close, moving averages, volume and derived metrics for ${name ?? normalised.ticker}.`,
+  };
+}
 
 export default async function TickerPage({
   params,
@@ -29,12 +55,17 @@ export default async function TickerPage({
   const range = parseRange(query.range);
 
   let series;
+  let storedName;
   try {
-    series = await getTickerSeries(ticker, range);
+    [series, storedName] = await Promise.all([
+      getTickerSeries(ticker, range),
+      getTickerName(ticker),
+    ]);
   } catch (error) {
     return <SetupNotice error={error} />;
   }
 
+  const name = companyName(ticker, storedName);
   const latest = series.at(-1) ?? null;
   const first = series.at(0) ?? null;
 
@@ -49,32 +80,42 @@ export default async function TickerPage({
       : null;
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-3">
+    <div className="shell flex flex-col gap-8 py-10 sm:py-14">
+      <header className="flex flex-col gap-6">
         <Link
-          href="/"
-          className="w-fit text-xs text-ink-muted transition-colors hover:text-ink-secondary"
+          href="/watchlist"
+          className="w-fit rounded text-sm text-ink-muted transition-colors hover:text-leaf focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 focus-visible:outline-none"
         >
           ← Watchlist
         </Link>
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-            <h1 className="display text-4xl tracking-wider text-ink">{ticker}</h1>
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h1 className="display text-4xl text-ink sm:text-5xl">
+              <span className="num font-medium tracking-tight">{ticker}</span>
+              {name && (
+                <span className="ml-3 align-middle text-xl font-medium text-ink-secondary sm:text-2xl">
+                  {name}
+                </span>
+              )}
+            </h1>
+
             {latest && (
-              <>
-                <span className="num-hero text-2xl text-ink">{formatPrice(latest.close)}</span>
-                <Delta value={latest.dailyReturn} className="text-base" />
+              <div className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-2">
+                <span className="num-hero text-3xl font-medium text-ink">
+                  {formatPrice(latest.close)}
+                </span>
+                <Delta value={latest.dailyReturn} variant="pill" className="text-sm" />
                 <span className="num text-xs text-ink-muted">as of {latest.date}</span>
-              </>
+              </div>
             )}
           </div>
 
           <RangeTabs active={range} basePath={`/ticker/${encodeURIComponent(ticker)}`} />
         </div>
-      </div>
+      </header>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatTile
           label={`${RANGE_LABELS[range]} return`}
           value={formatPercent(windowReturn)}

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { addTicker, getWatchlistOverview, isOnWatchlist } from "@/db/queries";
 import { authorizeWrite, writesAreGated } from "@/lib/auth";
+import { companyName } from "@/lib/companies";
 import { normaliseTicker } from "@/lib/ticker";
 import { checkSymbol } from "@/lib/yahoo";
 
@@ -52,7 +53,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: check.reason }, { status: 422 });
     }
 
-    const { added } = await addTicker(ticker);
+    // Only a confirmed match is persisted. An `unknown` lookup means Yahoo was
+    // unreachable or rate-limited, not that the company has no name — storing a
+    // guess there would make the column indistinguishable from the local name
+    // table it is supposed to outrank. Nulls are covered at render time.
+    const resolvedName = check.status === "valid" ? check.name : null;
+
+    const { added } = await addTicker(ticker, resolvedName);
     if (!added) {
       return NextResponse.json(
         { error: `${ticker} is already on the watchlist.` },
@@ -63,7 +70,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         ticker,
-        name: check.status === "valid" ? check.name : null,
+        name: companyName(ticker, resolvedName),
         exchange: check.status === "valid" ? check.exchange : null,
         // Surfaced so the UI can say "added, but we could not confirm the symbol
         // with Yahoo right now" instead of implying it was fully verified.

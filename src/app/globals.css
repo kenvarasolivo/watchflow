@@ -1,74 +1,134 @@
 @import "tailwindcss";
 
 /*
- * Watchflow is a deliberately single-mode (dark) surface — a financial console,
- * not a document. There is no light theme to swap to, so tokens are declared
- * once on :root rather than duplicated under a prefers-color-scheme block.
+ * Watchflow — light surface, heavy ink, one green.
+ * ------------------------------------------------
+ * Single-mode (light) by intent. The page is white, the type is near-black and
+ * bold, and colour appears only where it carries meaning. There is no dark
+ * theme to swap to, so tokens are declared once on :root rather than duplicated
+ * under a prefers-color-scheme block.
  *
- * The two categorical series hues and the gain/loss status pair were validated
- * against the chart surface (#101317) with the data-viz palette validator:
+ * The one accent is a deep leaf green. It is deliberately NOT the primary
+ * button colour — primary actions are solid ink, which keeps green free to mean
+ * exactly two things: the brand mark, and "up". A green CTA sitting next to a
+ * green +1.24% would make the colour ambiguous at the only moment it matters.
  *
- *   categorical  #d95926, #3987e5   → all-pairs PASS
- *                (lightness band, chroma floor, CVD ΔE 26.8, normal ΔE 31.8,
- *                 contrast ≥ 3:1)
- *   status       #0fb3a1, #e5484d   → CVD ΔE 11.4, normal ΔE 31.6, contrast ≥ 3:1
+ * Every token below was measured against the three surfaces it can land on
+ * (#ffffff, #f6f7f8, #f0f2f4) rather than eyeballed:
  *
- * The close-price line intentionally does NOT take a categorical slot: it is
- * the subject of the chart and carries emphasis (primary ink, 2px) while the
- * moving averages recede into the two validated hues at 1.5px. Keeping green
- * out of the price chart entirely means teal reads only as "gain", nowhere else.
+ *   text tokens        ink 19.8:1 · ink-secondary 7.6:1 · ink-muted 4.8:1
+ *   status pair        gain #0b6b3a 6.6:1 · loss #b42318 6.6:1
+ *   categorical pair   ma20 #c2410c 5.2:1 · ma50 #1d4ed8 6.7:1
+ *                      ΔE 36.6 normal · 34.6 deuteranopia · 30.4 protanopia
+ *   supporting mark    mark-neutral 3.4:1 (≥3:1 on all three surfaces)
+ *
+ * Two separation results shaped the rules, not just the values:
+ *
+ *  1. gain vs loss separates by ΔE 26.6 for normal vision but only 7.8 under
+ *     deuteranopia — the familiar red/green problem. It is not solved by
+ *     picking different reds and greens; it is solved by never letting colour
+ *     carry the sign alone. Every delta ships an arrow glyph and an explicit
+ *     +/− sign, and every chart has a table view.
+ *
+ *  2. ma20 (orange) collapses onto gain (green) under protanopia — ΔE 4.7. So
+ *     green stays out of the price chart entirely. The close line is ink and
+ *     carries the emphasis (2px); the two moving averages recede into the
+ *     validated categorical hues at 1.5px. Gain/loss green never appears in the
+ *     same plot as a categorical series.
+ *
+ * ink-muted on the leaf tint measures 4.27:1, below AA — tinted surfaces take
+ * ink-secondary or leaf-deep for small text, never ink-muted.
  */
 
 @theme {
-  --color-plane: #0a0b0d;
-  --color-surface: #101317;
-  --color-elevated: #161a20;
+  /* Surfaces, lightest to deepest. */
+  --color-canvas: #ffffff;
+  --color-subtle: #f6f7f8;
+  --color-sunken: #f0f2f4;
 
-  --color-ink: #f2f4f6;
-  --color-ink-secondary: #a8b0ba;
-  --color-ink-muted: #6b7480;
+  /* Ink. */
+  --color-ink: #0a0a0a;
+  --color-ink-secondary: #4b5563;
+  --color-ink-muted: #6b7280;
 
-  --color-grid: #1e232a;
-  --color-baseline: #2a313a;
-  --color-hairline: #232931;
+  /* Lines, weakest to strongest. */
+  --color-grid: #eef0f3;
+  --color-hairline: #e5e7eb;
+  --color-baseline: #d1d5db;
+
+  /* Brand — leaf. */
+  --color-leaf: #0b6b3a;
+  --color-leaf-deep: #084c29;
+  --color-leaf-soft: #eaf3ee;
 
   /* Status — gain/loss. Reserved; never reused as a series identity. */
-  --color-gain: #0fb3a1;
-  --color-loss: #e5484d;
+  --color-gain: #0b6b3a;
+  --color-loss: #b42318;
+
+  /* The landing page's ink band is the only inverted surface in the app, and
+     gain/loss measure 1.9:1 and 2.0:1 against #0a0a0a — unreadable. That one
+     section takes a lighter pair (10.6:1 and 9.7:1 on ink) which appears
+     nowhere else, so the normal tokens keep their meaning on white. */
+  --color-gain-inverse: #4ade80;
+  --color-loss-inverse: #fca5a5;
 
   /* Categorical series slots (moving averages). */
-  --color-series-ma20: #d95926;
-  --color-series-ma50: #3987e5;
+  --color-series-ma20: #c2410c;
+  --color-series-ma50: #1d4ed8;
 
   /* Supporting single-series mark (volume bars) — neutral by design so it
      never competes with the categorical slots or the gain/loss tokens. */
-  --color-mark-neutral: #47525f;
+  --color-mark-neutral: #828c99;
 
-  --font-display: var(--font-bebas), "Arial Narrow", sans-serif;
-  --font-mono: var(--font-dm-mono), ui-monospace, "SFMono-Regular", monospace;
+  --font-display: var(--font-inter-tight), system-ui, -apple-system, sans-serif;
   --font-sans: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-dm-mono), ui-monospace, "SFMono-Regular", monospace;
 }
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
 }
 
 html,
 body {
-  background-color: var(--color-plane);
+  background-color: var(--color-canvas);
   color: var(--color-ink);
 }
 
 body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* Headings use Bebas Neue, which is all-caps by design and sits tight. */
+/*
+ * Headlines. Inter Tight at heavy weights with negative tracking — the tracking
+ * is a function of size, so it is applied by the `.display` class rather than
+ * per-heading, and tightened again at display sizes where the default optical
+ * spacing reads loose.
+ */
 .display {
   font-family: var(--font-display);
-  letter-spacing: 0.04em;
-  line-height: 0.95;
+  font-weight: 700;
+  letter-spacing: -0.028em;
+  line-height: 1.05;
+}
+
+.display-xl {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.042em;
+  line-height: 0.98;
 }
 
 /*
@@ -84,6 +144,30 @@ body {
 .num-hero {
   font-family: var(--font-mono);
   font-variant-numeric: normal;
+  letter-spacing: -0.02em;
+}
+
+/* The one horizontal rhythm every page shares. */
+.shell {
+  margin-inline: auto;
+  width: 100%;
+  max-width: 78rem;
+  padding-inline: 1.25rem;
+}
+
+@media (min-width: 640px) {
+  .shell {
+    padding-inline: 2rem;
+  }
+}
+
+/* Section eyebrow — small, wide, muted, used once per landing section. */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
 }
 
 /* Recharts injects focus outlines on the wrapper; we manage focus ourselves. */
@@ -93,11 +177,65 @@ body {
 }
 
 ::selection {
-  background-color: color-mix(in oklab, var(--color-gain) 35%, transparent);
+  background-color: color-mix(in oklab, var(--color-leaf) 22%, transparent);
 }
 
 /* Scrollbars, so horizontal table overflow doesn't look like a rendering bug. */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--color-baseline) transparent;
+}
+
+/*
+ * The marquee on the landing page. Duration is set inline from the track width
+ * so the speed stays constant regardless of how many tickers are on the
+ * watchlist, and the whole thing stops for reduced-motion users — a strip of
+ * live prices is decoration, and decoration must never be the reason someone
+ * cannot read the page.
+ */
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.marquee-track {
+  animation: marquee var(--marquee-duration, 60s) linear infinite;
+}
+
+.marquee:hover .marquee-track {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track {
+    animation: none;
+  }
+}
+
+/* Landing hero backdrop: a faint grid that fades out toward the bottom and the
+   edges. Purely decorative, drawn in CSS so it costs no request and no layout.
+   It uses the hairline token rather than the grid token — at 1px, behind a
+   radial mask, the grid token is below the threshold of being visible at all,
+   which makes it decoration nobody can see. */
+.grid-veil {
+  background-image:
+    linear-gradient(to right, var(--color-hairline) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-hairline) 1px, transparent 1px);
+  background-size: 72px 72px;
+
+  /* Two masks intersected, so the grid fades out on all four sides rather than
+     stopping at a hard line under the header. A single radial mask leaves the
+     top row at full strength, which reads as a rendering seam. */
+  mask-image:
+    linear-gradient(to bottom, transparent 0%, #000 24%, transparent 88%),
+    linear-gradient(to right, transparent 0%, #000 14%, #000 86%, transparent 100%);
+  mask-composite: intersect;
+  -webkit-mask-image:
+    linear-gradient(to bottom, transparent 0%, #000 24%, transparent 88%),
+    linear-gradient(to right, transparent 0%, #000 14%, #000 86%, transparent 100%);
+  -webkit-mask-composite: source-in;
 }

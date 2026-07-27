@@ -1,13 +1,22 @@
 import type { Metadata } from "next";
-import { Bebas_Neue, DM_Mono, Inter } from "next/font/google";
+import { DM_Mono, Inter, Inter_Tight } from "next/font/google";
 import Link from "next/link";
+
+import { Logo } from "@/components/site/Logo";
+import { SiteFooter } from "@/components/site/SiteFooter";
+import { SiteNav } from "@/components/site/SiteNav";
 
 import "./globals.css";
 
-const bebas = Bebas_Neue({
+const interTight = Inter_Tight({
   subsets: ["latin"],
-  weight: "400",
-  variable: "--font-bebas",
+  variable: "--font-inter-tight",
+  display: "swap",
+});
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
   display: "swap",
 });
 
@@ -18,59 +27,64 @@ const dmMono = DM_Mono({
   display: "swap",
 });
 
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-  display: "swap",
-});
-
 export const metadata: Metadata = {
-  title: "Watchflow — watchlist analytics",
+  title: {
+    default: "Watchflow — watchlist analytics with a visible pipeline",
+    template: "%s · Watchflow",
+  },
   description:
-    "Daily OHLCV ingestion, derived metrics and watchlist performance analytics, fed by a scheduled ETL pipeline.",
+    "Daily OHLCV ingestion, derived metrics and watchlist performance analytics, fed by a scheduled ETL pipeline that logs every run.",
 };
-
-const NAV = [
-  { href: "/", label: "Watchlist" },
-  { href: "/performance", label: "Performance" },
-  { href: "/pipeline", label: "Pipeline" },
-] as const;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${bebas.variable} ${dmMono.variable} ${inter.variable}`}>
-      <body className="min-h-screen bg-plane text-ink">
-        <div className="mx-auto flex min-h-screen w-full max-w-[1400px] flex-col px-5 sm:px-8">
-          <header className="flex flex-col gap-4 border-b border-hairline py-5 sm:flex-row sm:items-end sm:justify-between">
-            <Link href="/" className="group flex items-baseline gap-3">
-              <span className="display text-4xl text-ink sm:text-5xl">WATCHFLOW</span>
-              <span className="hidden text-xs tracking-widest text-ink-muted uppercase sm:inline">
-                watchlist analytics
-              </span>
+    <html
+      lang="en"
+      className={`${interTight.variable} ${inter.variable} ${dmMono.variable}`}
+    >
+      <body className="flex min-h-screen flex-col bg-canvas text-ink">
+        {/* Keyboard users land here first; the header nav is three links deep on
+            every page, and the landing page puts a lot of prose above the app. */}
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-ink focus:px-4 focus:py-2 focus:text-sm focus:text-canvas"
+        >
+          Skip to content
+        </a>
+
+        <header className="sticky top-0 z-40 border-b border-hairline bg-canvas/85 backdrop-blur-md">
+          <div className="shell flex h-16 items-center gap-3">
+            <Link
+              href="/"
+              className="shrink-0 rounded-lg text-lg text-ink focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 focus-visible:outline-none"
+              aria-label="Watchflow — home"
+            >
+              <Logo wordmarkClassName="hidden sm:inline" />
             </Link>
 
-            <nav className="flex items-center gap-1" aria-label="Primary">
-              {NAV.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="rounded px-3 py-1.5 text-sm text-ink-secondary transition-colors hover:bg-elevated hover:text-ink focus-visible:ring-2 focus-visible:ring-gain focus-visible:outline-none"
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
-          </header>
+            {/* min-w-0 + overflow-x-auto so an unexpectedly wide nav scrolls
+                itself rather than widening the document. */}
+            <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-4">
+              <div className="min-w-0 overflow-x-auto">
+                <SiteNav />
+              </div>
+              <Link
+                href="/watchlist"
+                className="hidden shrink-0 rounded-full bg-ink px-4 py-2 text-sm font-medium text-canvas transition-colors hover:bg-ink-secondary focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 focus-visible:outline-none md:inline-flex"
+              >
+                Open dashboard
+              </Link>
+            </div>
+          </div>
+        </header>
 
-          <main className="flex-1 py-7">{children}</main>
+        {/* min-w-0 so a single wide table on one page can never widen the
+            document for the header and footer as well. */}
+        <main id="main" className="min-w-0 flex-1">
+          {children}
+        </main>
 
-          <footer className="border-t border-hairline py-5 text-xs text-ink-muted">
-            <p>
-              Daily OHLCV from Yahoo Finance via a scheduled GitHub Actions pipeline. Prices are
-              end-of-day, not real time. Nothing here is investment advice.
-            </p>
-          </footer>
-        </div>
+        <SiteFooter />
       </body>
     </html>
   );

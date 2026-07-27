@@ -8,6 +8,10 @@ import { direction } from "@/lib/format";
  * container and event layer per table row for no benefit. This renders on the
  * server with zero client JS.
  *
+ * The area under the line is a flat fill at 8% rather than a gradient, so the
+ * component needs no `<defs>` and therefore no unique id — the same ticker can
+ * appear twice on a page (marquee and card) without two gradients colliding.
+ *
  * Colour follows the sign of the window (first → last close), reusing the
  * reserved gain/loss status tokens. It is decorative reinforcement only — the
  * same information is in the adjacent return column as text, so the sparkline
@@ -18,11 +22,22 @@ export function Sparkline({
   width = 104,
   height = 28,
   label,
+  area = true,
+  strokeWidth = 1.5,
+  className = "overflow-visible",
 }: {
   values: number[];
   width?: number;
   height?: number;
   label: string;
+  area?: boolean;
+  strokeWidth?: number;
+  /**
+   * `width`/`height` stay the intrinsic size. Pass `h-auto w-full` here to let
+   * the SVG scale to its container instead — the viewBox keeps the aspect ratio,
+   * so the line is never squashed.
+   */
+  className?: string;
 }) {
   const clean = values.filter((v) => Number.isFinite(v));
 
@@ -31,9 +46,10 @@ export function Sparkline({
       <svg
         width={width}
         height={height}
+        viewBox={`0 0 ${width} ${height}`}
         role="img"
         aria-label={`${label}: not enough data for a sparkline`}
-        className="overflow-visible"
+        className={className}
       >
         <line
           x1={0}
@@ -42,6 +58,7 @@ export function Sparkline({
           y2={height / 2}
           stroke="var(--color-baseline)"
           strokeWidth={1}
+          strokeDasharray="3 3"
         />
       </svg>
     );
@@ -54,11 +71,13 @@ export function Sparkline({
   const padding = 2;
   const usableHeight = height - padding * 2;
 
-  const points = clean.map((value, index) => {
+  const coords = clean.map((value, index) => {
     const x = (index / (clean.length - 1)) * width;
     const y = padding + (1 - (value - min) / span) * usableHeight;
-    return `${x.toFixed(2)},${y.toFixed(2)}`;
+    return [x, y] as const;
   });
+
+  const points = coords.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`);
 
   const trend = direction(clean[clean.length - 1] - clean[0]);
   const stroke =
@@ -68,7 +87,7 @@ export function Sparkline({
         ? "var(--color-loss)"
         : "var(--color-ink-muted)";
 
-  const [lastX, lastY] = points[points.length - 1].split(",").map(Number);
+  const [lastX, lastY] = coords[coords.length - 1];
 
   return (
     <svg
@@ -77,19 +96,33 @@ export function Sparkline({
       viewBox={`0 0 ${width} ${height}`}
       role="img"
       aria-label={`${label}: ${clean.length}-day close price trend, ${trend === "up" ? "up" : trend === "down" ? "down" : "flat"} over the window`}
-      className="overflow-visible"
+      className={className}
     >
+      {area && (
+        <polygon
+          points={`0,${height} ${points.join(" ")} ${width},${height}`}
+          fill={stroke}
+          fillOpacity={0.08}
+        />
+      )}
       <polyline
         points={points.join(" ")}
         fill="none"
         stroke={stroke}
-        strokeWidth={1.5}
+        strokeWidth={strokeWidth}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      {/* Endpoint dot with a 2px surface ring, so it stays legible where the
+      {/* Endpoint dot with a 2px canvas ring, so it stays legible where the
           line doubles back over itself. */}
-      <circle cx={lastX} cy={lastY} r={2.5} fill={stroke} stroke="var(--color-surface)" strokeWidth={2} />
+      <circle
+        cx={lastX}
+        cy={lastY}
+        r={2.5}
+        fill={stroke}
+        stroke="var(--color-canvas)"
+        strokeWidth={2}
+      />
     </svg>
   );
 }

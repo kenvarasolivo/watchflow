@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+
 import { SetupNotice } from "@/components/SetupNotice";
 import { StatTile } from "@/components/StatTile";
 import { getRecentPipelineRuns, type PipelineStatus } from "@/db/queries";
@@ -5,11 +7,20 @@ import { formatDateTime, formatRelative } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-const TONE: Record<PipelineStatus["status"], string> = {
-  success: "text-gain",
-  running: "text-series-ma50",
-  partial_failure: "text-series-ma20",
-  failed: "text-loss",
+export const metadata: Metadata = {
+  title: "Pipeline runs",
+  description: "Every execution of the extract → transform → load pipeline, succeeded or not.",
+};
+
+const TONE: Record<PipelineStatus["status"], { text: string; dot: string; chip: string }> = {
+  success: { text: "text-gain", dot: "bg-gain", chip: "bg-gain/10" },
+  running: { text: "text-series-ma50", dot: "bg-series-ma50", chip: "bg-series-ma50/10" },
+  partial_failure: {
+    text: "text-series-ma20",
+    dot: "bg-series-ma20",
+    chip: "bg-series-ma20/10",
+  },
+  failed: { text: "text-loss", dot: "bg-loss", chip: "bg-loss/10" },
 };
 
 const LABEL: Record<PipelineStatus["status"], string> = {
@@ -37,29 +48,28 @@ export default async function PipelinePage() {
   const successes = runs.filter((run) => run.status === "success").length;
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="display text-3xl text-ink">PIPELINE RUNS</h1>
-        <p className="mt-1 max-w-2xl text-sm text-ink-muted">
+    <div className="shell flex flex-col gap-8 py-10 sm:py-14">
+      <header>
+        <h1 className="display text-4xl text-ink sm:text-5xl">Pipeline runs</h1>
+        <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-secondary">
           Every execution of the extract → transform → load pipeline writes a row here, whether
-          it succeeded or not. Scheduled runs fire from GitHub Actions after the US close;
-          manual runs come from <code className="num">workflow_dispatch</code> or a local shell.
+          it succeeded or not. Scheduled runs fire from GitHub Actions after the US close; manual
+          runs come from <code className="num text-ink">workflow_dispatch</code> or a local shell.
         </p>
-      </div>
+      </header>
 
       {latest === null ? (
-        <div className="rounded border border-dashed border-hairline bg-surface px-6 py-12 text-center">
-          <p className="display text-2xl text-ink-secondary">NO RUNS RECORDED</p>
-          <p className="mx-auto mt-2 max-w-lg text-sm text-ink-muted">
+        <div className="rounded-2xl border border-dashed border-baseline bg-subtle px-6 py-16 text-center">
+          <p className="display text-2xl text-ink">No runs recorded</p>
+          <p className="mx-auto mt-3 max-w-lg text-sm leading-relaxed text-ink-secondary">
             Run the pipeline once to populate this log — either{" "}
-            <code className="num text-ink-secondary">python -m watchflow_pipeline</code> locally,
-            or the <span className="text-ink-secondary">Run pipeline</span> workflow in GitHub
-            Actions.
+            <code className="num text-ink">python -m watchflow_pipeline</code> locally, or the{" "}
+            <span className="font-medium text-ink">Run pipeline</span> workflow in GitHub Actions.
           </p>
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             <StatTile
               label="Last run"
               value={formatRelative(latest.finishedAt ?? latest.startedAt)}
@@ -82,19 +92,19 @@ export default async function PipelinePage() {
             />
           </div>
 
-          <div className="overflow-x-auto rounded border border-hairline bg-surface">
-            <table className="w-full min-w-[900px] border-collapse text-sm">
+          <div className="overflow-x-auto rounded-2xl border border-hairline bg-canvas">
+            <table className="w-full min-w-[940px] border-collapse text-sm">
               <caption className="sr-only">Recent pipeline runs, newest first.</caption>
               <thead>
-                <tr className="border-b border-hairline text-left text-xs tracking-widest text-ink-muted uppercase">
-                  <th scope="col" className="px-4 py-3 font-normal">Run</th>
-                  <th scope="col" className="px-4 py-3 font-normal">Status</th>
-                  <th scope="col" className="px-4 py-3 font-normal">Started</th>
-                  <th scope="col" className="px-4 py-3 text-right font-normal">Duration</th>
-                  <th scope="col" className="px-4 py-3 text-right font-normal">Tickers</th>
-                  <th scope="col" className="px-4 py-3 text-right font-normal">Upserted</th>
-                  <th scope="col" className="px-4 py-3 text-right font-normal">Rejected</th>
-                  <th scope="col" className="px-4 py-3 font-normal">Trigger</th>
+                <tr className="border-b border-hairline text-left text-[0.6875rem] tracking-[0.14em] text-ink-muted uppercase">
+                  <th scope="col" className="px-5 py-3.5 font-medium">Run</th>
+                  <th scope="col" className="px-5 py-3.5 font-medium">Status</th>
+                  <th scope="col" className="px-5 py-3.5 font-medium">Started</th>
+                  <th scope="col" className="px-5 py-3.5 text-right font-medium">Duration</th>
+                  <th scope="col" className="px-5 py-3.5 text-right font-medium">Tickers</th>
+                  <th scope="col" className="px-5 py-3.5 text-right font-medium">Upserted</th>
+                  <th scope="col" className="px-5 py-3.5 text-right font-medium">Rejected</th>
+                  <th scope="col" className="px-5 py-3.5 font-medium">Trigger</th>
                 </tr>
               </thead>
               <tbody>
@@ -112,45 +122,44 @@ export default async function PipelinePage() {
 
 function RunRow({ run }: { run: PipelineStatus }) {
   const notes = run.errorSummary ?? run.details;
+  const tone = TONE[run.status];
 
   return (
     <>
-      <tr className="border-b border-hairline/60 hover:bg-elevated/40">
-        <th scope="row" className="num px-4 py-3 text-left font-normal text-ink-muted">
+      <tr className="border-b border-grid transition-colors hover:bg-subtle">
+        <th scope="row" className="num px-5 py-3.5 text-left font-normal text-ink-muted">
           #{run.id}
         </th>
-        <td className={`px-4 py-3 ${TONE[run.status]}`}>
-          <span className="flex items-center gap-2">
-            <span
-              aria-hidden="true"
-              className="size-1.5 rounded-full"
-              style={{ backgroundColor: "currentColor" }}
-            />
+        <td className="px-5 py-3.5">
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${tone.chip} ${tone.text}`}
+          >
+            <span aria-hidden="true" className={`size-1.5 rounded-full ${tone.dot}`} />
             {LABEL[run.status]}
           </span>
         </td>
-        <td className="num px-4 py-3 text-xs text-ink-secondary">
+        <td className="num px-5 py-3.5 text-xs text-ink-secondary">
           {formatDateTime(run.startedAt)}
         </td>
-        <td className="num px-4 py-3 text-right text-ink-secondary">{duration(run)}</td>
-        <td className="num px-4 py-3 text-right text-ink-secondary">{run.tickersProcessed}</td>
-        <td className="num px-4 py-3 text-right text-ink">
+        <td className="num px-5 py-3.5 text-right text-ink-secondary">{duration(run)}</td>
+        <td className="num px-5 py-3.5 text-right text-ink-secondary">{run.tickersProcessed}</td>
+        <td className="num px-5 py-3.5 text-right font-medium text-ink">
           {run.rowsUpserted.toLocaleString()}
         </td>
         <td
-          className={`num px-4 py-3 text-right ${run.rowsRejected > 0 ? "text-loss" : "text-ink-muted"}`}
+          className={`num px-5 py-3.5 text-right ${run.rowsRejected > 0 ? "font-medium text-loss" : "text-ink-muted"}`}
         >
           {run.rowsRejected}
         </td>
-        <td className="num px-4 py-3 text-xs text-ink-muted">{run.trigger}</td>
+        <td className="num px-5 py-3.5 text-xs text-ink-muted">{run.trigger}</td>
       </tr>
 
       {notes && (
-        <tr className="border-b border-hairline/60">
-          <td colSpan={8} className="px-4 pt-0 pb-3">
+        <tr className="border-b border-grid">
+          <td colSpan={8} className="px-5 pt-0 pb-4">
             <pre
-              className={`num max-h-40 overflow-auto rounded border border-hairline bg-plane px-3 py-2 text-xs whitespace-pre-wrap ${
-                run.errorSummary ? "text-loss" : "text-ink-muted"
+              className={`num max-h-40 overflow-auto rounded-xl border border-hairline bg-subtle px-4 py-3 text-xs whitespace-pre-wrap ${
+                run.errorSummary ? "text-loss" : "text-ink-secondary"
               }`}
             >
               {notes}

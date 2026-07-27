@@ -17,14 +17,18 @@ const TONE: Record<PipelineStatus["status"], { dot: string; text: string; label:
  * only as current as the last pipeline run, and hiding that would make a failed
  * cron look identical to a flat market. It doubles as visible proof the
  * scheduled pipeline is actually running.
+ *
+ * The status dot is never the only signal — the word beside it says the same
+ * thing, so the badge survives without colour.
  */
 export function PipelineBadge({ run }: { run: PipelineStatus | null }) {
   if (!run) {
     return (
-      <div className="flex items-center gap-2 text-xs text-ink-muted">
+      <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-hairline bg-subtle px-3 py-1.5 text-xs text-ink-secondary">
         <span aria-hidden="true" className="size-1.5 rounded-full bg-ink-muted" />
         <span>
-          No pipeline run recorded yet — run <code className="num text-ink-secondary">python -m watchflow_pipeline</code> to load data.
+          No pipeline run recorded yet — run{" "}
+          <code className="num text-ink">python -m watchflow_pipeline</code>
         </span>
       </div>
     );
@@ -36,33 +40,37 @@ export function PipelineBadge({ run }: { run: PipelineStatus | null }) {
   return (
     <Link
       href="/pipeline"
-      className="group flex flex-wrap items-center gap-x-3 gap-y-1 text-xs transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-gain focus-visible:outline-none"
       title={`Pipeline run #${run.id} — ${formatDateTime(stamp)}`}
+      className="group inline-flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-full border border-hairline bg-subtle px-3 py-1.5 text-xs transition-colors hover:border-baseline hover:bg-sunken focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 focus-visible:outline-none"
     >
-      <span className="flex items-center gap-2">
+      <span className="flex items-center gap-1.5">
         <span aria-hidden="true" className={`size-1.5 rounded-full ${tone.dot}`} />
-        <span className={tone.text}>{tone.label}</span>
+        <span className={`font-medium ${tone.text}`}>{tone.label}</span>
       </span>
 
-      <span className="text-ink-muted">
-        Data last updated{" "}
-        <span className="num text-ink-secondary">{formatRelative(stamp)}</span>
+      <span aria-hidden="true" className="text-baseline">
+        ·
       </span>
 
-      <span className="text-ink-muted">
-        <span className="num text-ink-secondary">{run.rowsUpserted.toLocaleString()}</span> rows ·{" "}
-        <span className="num text-ink-secondary">{run.tickersProcessed}</span> tickers
+      <span className="text-ink-secondary">
+        updated <span className="num text-ink">{formatRelative(stamp)}</span>
+      </span>
+
+      <span aria-hidden="true" className="text-baseline">
+        ·
+      </span>
+
+      <span className="text-ink-secondary">
+        <span className="num text-ink">{run.rowsUpserted.toLocaleString()}</span> rows
         {run.rowsRejected > 0 && (
           <>
-            {" · "}
+            {", "}
             <span className="num text-loss">{run.rowsRejected}</span> rejected
           </>
         )}
       </span>
 
-      <span className="text-ink-muted underline decoration-dotted underline-offset-2 group-hover:text-ink">
-        run log
-      </span>
+      <span className="text-ink-muted transition-colors group-hover:text-leaf">→</span>
     </Link>
   );
 }

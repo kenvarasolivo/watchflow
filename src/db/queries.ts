@@ -22,6 +22,8 @@ import { type Range, rangeStartDate } from "@/lib/range";
 
 export type WatchlistRow = {
   ticker: string;
+  /** Exchange-resolved company name, or null when the add-time lookup failed. */
+  name: string | null;
   addedAt: string;
   lastDate: string | null;
   close: number | null;
@@ -45,6 +47,7 @@ export type SeriesPoint = {
 
 export type PerformanceRow = {
   ticker: string;
+  name: string | null;
   firstDate: string | null;
   lastDate: string | null;
   firstClose: number | null;
@@ -100,30 +103,58 @@ export async function getDefaultWatchlistId(): Promise<number> {
   return created[0].id;
 }
 
-export async function listTickers(): Promise<{ ticker: string; addedAt: string }[]> {
+export async function listTickers(): Promise<
+  { ticker: string; name: string | null; addedAt: string }[]
+> {
   const db = getDb();
   const watchlistId = await getDefaultWatchlistId();
 
   const rows = await db
-    .select({ ticker: watchlistTickers.ticker, addedAt: watchlistTickers.addedAt })
+    .select({
+      ticker: watchlistTickers.ticker,
+      name: watchlistTickers.name,
+      addedAt: watchlistTickers.addedAt,
+    })
     .from(watchlistTickers)
     .where(eq(watchlistTickers.watchlistId, watchlistId))
     .orderBy(asc(watchlistTickers.ticker));
 
-  return rows.map((r) => ({ ticker: r.ticker, addedAt: String(r.addedAt) }));
+  return rows.map((r) => ({ ticker: r.ticker, name: r.name, addedAt: String(r.addedAt) }));
 }
 
-export async function addTicker(ticker: string): Promise<{ added: boolean }> {
+export async function addTicker(
+  ticker: string,
+  name: string | null = null,
+): Promise<{ added: boolean }> {
   const db = getDb();
   const watchlistId = await getDefaultWatchlistId();
 
   const inserted = await db
     .insert(watchlistTickers)
-    .values({ watchlistId, ticker })
+    .values({ watchlistId, ticker, name })
     .onConflictDoNothing()
     .returning({ ticker: watchlistTickers.ticker });
 
   return { added: inserted.length > 0 };
+}
+
+/**
+ * The stored name for one ticker, independent of the watchlist overview.
+ *
+ * `/ticker/[symbol]` renders for symbols that were never added — a link that
+ * was bookmarked, or a ticker removed since — so this returns null rather than
+ * throwing, and the caller falls back to the local name table.
+ */
+export async function getTickerName(ticker: string): Promise<string | null> {
+  const db = getDb();
+
+  const rows = await db
+    .select({ name: watchlistTickers.name })
+    .from(watchlistTickers)
+    .where(eq(watchlistTickers.ticker, ticker))
+    .limit(1);
+
+  return rows[0]?.name ?? null;
 }
 
 export async function removeTicker(ticker: string): Promise<{ removed: boolean }> {
@@ -171,6 +202,7 @@ export async function getWatchlistOverview(): Promise<WatchlistRow[]> {
 
   const result = await db.execute<{
     ticker: string;
+    name: string | null;
     added_at: string;
     last_date: string | null;
     close: number | null;
@@ -179,7 +211,7 @@ export async function getWatchlistOverview(): Promise<WatchlistRow[]> {
     sparkline: number[] | null;
   }>(sql`
     with wl as (
-      select ticker, added_at
+      select ticker, name, added_at
       from watchlist_tickers
       where watchlist_id = ${watchlistId}
     ),
@@ -203,6 +235,7 @@ export async function getWatchlistOverview(): Promise<WatchlistRow[]> {
     )
     select
       wl.ticker                       as ticker,
+      wl.name                         as name,
       wl.added_at                     as added_at,
       latest.date                     as last_date,
       latest.close::float8            as close,
@@ -218,6 +251,7 @@ export async function getWatchlistOverview(): Promise<WatchlistRow[]> {
 
   return result.rows.map((r) => ({
     ticker: r.ticker,
+    name: r.name,
     addedAt: String(r.added_at),
     lastDate: r.last_date,
     close: r.close,
@@ -290,6 +324,7 @@ export async function getWatchlistPerformance(range: Range): Promise<Performance
 
   const result = await db.execute<{
     ticker: string;
+    name: string | null;
     first_date: string | null;
     last_date: string | null;
     first_close: number | null;
@@ -299,7 +334,7 @@ export async function getWatchlistPerformance(range: Range): Promise<Performance
     observations: number;
   }>(sql`
     with wl as (
-      select ticker from watchlist_tickers where watchlist_id = ${watchlistId}
+      select ticker, name from watchlist_tickers where watchlist_id = ${watchlistId}
     ),
     win as (
       select p.ticker, p.date, p.close
@@ -318,6 +353,7 @@ export async function getWatchlistPerformance(range: Range): Promise<Performance
     )
     select
       wl.ticker                                   as ticker,
+      wl.name                                     as name,
       f.date                                      as first_date,
       l.date                                      as last_date,
       f.close::float8                             as first_close,
@@ -338,6 +374,7 @@ export async function getWatchlistPerformance(range: Range): Promise<Performance
 
   return result.rows.map((r) => ({
     ticker: r.ticker,
+    name: r.name,
     firstDate: r.first_date,
     lastDate: r.last_date,
     firstClose: r.first_close,

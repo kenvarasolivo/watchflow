@@ -32,10 +32,10 @@ export function StatTile({
       : "text-ink";
 
   return (
-    <div className="rounded border border-hairline bg-surface px-4 py-3">
-      <p className="text-[0.7rem] tracking-widest text-ink-muted uppercase">{label}</p>
-      <p className={`num-hero mt-1.5 text-2xl ${valueTone}`}>{value}</p>
-      {hint && <p className="mt-1 text-xs text-ink-muted">{hint}</p>}
+    <div className="rounded-xl border border-hairline bg-canvas px-5 py-4">
+      <p className="eyebrow">{label}</p>
+      <p className={`num-hero mt-2 text-2xl font-medium ${valueTone}`}>{value}</p>
+      {hint && <p className="mt-1.5 text-xs leading-relaxed text-ink-muted">{hint}</p>}
     </div>
   );
 }

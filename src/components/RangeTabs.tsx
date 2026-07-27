@@ -21,7 +21,7 @@ export function RangeTabs({
 }) {
   return (
     <div
-      className="inline-flex items-center gap-0.5 rounded border border-hairline bg-surface p-0.5"
+      className="inline-flex items-center gap-0.5 rounded-full border border-hairline bg-subtle p-1"
       role="group"
       aria-label={label}
     >
@@ -33,10 +33,10 @@ export function RangeTabs({
             href={`${basePath}?range=${range}`}
             aria-current={isActive ? "true" : undefined}
             scroll={false}
-            className={`num rounded px-3 py-1 text-xs tracking-wide transition-colors focus-visible:ring-2 focus-visible:ring-gain focus-visible:outline-none ${
+            className={`num rounded-full px-3.5 py-1 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 focus-visible:outline-none ${
               isActive
-                ? "bg-elevated text-ink"
-                : "text-ink-muted hover:bg-elevated/60 hover:text-ink-secondary"
+                ? "bg-canvas text-ink shadow-[0_1px_2px_rgba(10,10,10,0.06)]"
+                : "text-ink-muted hover:text-ink"
             }`}
           >
             {RANGE_LABELS[range]}
