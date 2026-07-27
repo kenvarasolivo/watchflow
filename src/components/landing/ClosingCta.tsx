@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { LeafMark } from "@/components/site/Logo";
+import { OwlMark } from "@/components/site/Logo";
 
 /**
  * The one place the accent green gets a full-bleed surface.
@@ -14,7 +14,9 @@ export function ClosingCta() {
     <section className="bg-leaf-deep text-canvas">
       <div className="shell flex flex-col items-start gap-8 py-16 sm:py-20 lg:flex-row lg:items-center lg:justify-between">
         <div className="max-w-2xl">
-          <LeafMark className="size-9 text-canvas" vein="var(--color-leaf-deep)" />
+          {/* No colour prop needed: the facial disc is a hole, so the band's
+              green shows through and the mark inverts by itself. */}
+          <OwlMark className="size-9 text-canvas" />
           <h2 className="display mt-5 text-3xl text-canvas sm:text-4xl">
             Add a ticker. The next run picks it up.
           </h2>

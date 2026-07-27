@@ -62,18 +62,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Logo wordmarkClassName="hidden sm:inline" />
             </Link>
 
-            {/* min-w-0 + overflow-x-auto so an unexpectedly wide nav scrolls
+            {/* No CTA button here: it pointed at /watchlist, which is exactly
+                where the "Watchlist" nav item goes. The landing page carries its
+                own calls to action in the hero and the closing band.
+                min-w-0 + overflow-x-auto so an unexpectedly wide nav scrolls
                 itself rather than widening the document. */}
-            <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-4">
-              <div className="min-w-0 overflow-x-auto">
-                <SiteNav />
-              </div>
-              <Link
-                href="/watchlist"
-                className="hidden shrink-0 rounded-full bg-ink px-4 py-2 text-sm font-medium text-canvas transition-colors hover:bg-ink-secondary focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 focus-visible:outline-none md:inline-flex"
-              >
-                Open dashboard
-              </Link>
+            <div className="ml-auto min-w-0 overflow-x-auto">
+              <SiteNav />
             </div>
           </div>
         </header>

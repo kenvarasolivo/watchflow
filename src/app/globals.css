@@ -13,6 +13,10 @@
  * exactly two things: the brand mark, and "up". A green CTA sitting next to a
  * green +1.24% would make the colour ambiguous at the only moment it matters.
  *
+ * `--color-leaf*` names the hue, not the logo: the mark is an owl. The token
+ * kept its name because "leaf green" describes the colour accurately and
+ * renaming it would touch every file for no behavioural gain.
+ *
  * Every token below was measured against the three surfaces it can land on
  * (#ffffff, #f6f7f8, #f0f2f4) rather than eyeballed:
  *
