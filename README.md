@@ -392,7 +392,7 @@ you never have to keep two versions of it.
 # 2. Schema and starter data
 npm install
 npm run db:migrate                # applies drizzle/0000_*.sql
-npm run db:seed                   # default watchlist + AAPL MSFT NVDA AMZN GOOGL SPY
+npm run db:seed                   # default watchlist + 36 widely-tracked tickers and ETFs
 
 # 3. First pipeline run
 cd pipeline
