@@ -2,9 +2,9 @@ import Link from "next/link";
 
 import { Delta } from "@/components/Delta";
 import { Sparkline } from "@/components/Sparkline";
-import type { PipelineStatus, WatchlistRow } from "@/db/queries";
+import type { WatchlistRow } from "@/db/queries";
 import { companyName } from "@/lib/companies";
-import { formatPrice, formatRelative } from "@/lib/format";
+import { formatPrice } from "@/lib/format";
 
 /**
  * Live proof, placed before any marketing claim gets made.
@@ -14,14 +14,16 @@ import { formatPrice, formatRelative } from "@/lib/format";
  * When no ticker has a return yet — a fresh database, or a watchlist added
  * between runs — it falls back to the first four rows rather than rendering an
  * empty grid, because "nothing moved" and "nothing loaded" must not look alike.
+ *
+ * The run statistics that used to close this section moved to `LastRunBand`,
+ * higher on the page. They were the same four figures, and printing them twice
+ * invited the reader to check whether the two copies agreed.
  */
 export function LiveBoard({
   rows,
-  run,
   tickerCount,
 }: {
   rows: WatchlistRow[];
-  run: PipelineStatus | null;
   tickerCount: number;
 }) {
   const withReturns = rows.filter((row) => row.dailyReturn !== null && row.close !== null);
@@ -35,29 +37,6 @@ export function LiveBoard({
   ).slice(0, 4);
 
   if (movers.length === 0) return null;
-
-  const stats: { label: string; value: string; hint: string }[] = [
-    {
-      label: "Tickers tracked",
-      value: String(tickerCount),
-      hint: "Union of every watchlist",
-    },
-    {
-      label: "Rows in the last run",
-      value: run ? run.rowsUpserted.toLocaleString() : "—",
-      hint: "Upserted, not inserted",
-    },
-    {
-      label: "Rows rejected",
-      value: run ? run.rowsRejected.toLocaleString() : "—",
-      hint: run && run.rowsRejected > 0 ? "Logged with a reason" : "Clean run",
-    },
-    {
-      label: "Data updated",
-      value: run ? formatRelative(run.finishedAt ?? run.startedAt) : "never",
-      hint: "After the US close, weekdays",
-    },
-  ];
 
   return (
     <section className="shell py-16 sm:py-24">
@@ -120,16 +99,6 @@ export function LiveBoard({
           );
         })}
       </ul>
-
-      <dl className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {stats.map((stat) => (
-          <div key={stat.label} className="rounded-2xl bg-subtle px-5 py-4">
-            <dt className="eyebrow">{stat.label}</dt>
-            <dd className="num-hero mt-2 text-xl font-medium text-ink">{stat.value}</dd>
-            <dd className="mt-1 text-xs text-ink-muted">{stat.hint}</dd>
-          </div>
-        ))}
-      </dl>
     </section>
   );
 }

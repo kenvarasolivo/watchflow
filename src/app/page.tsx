@@ -5,6 +5,7 @@ import { ClosingCta } from "@/components/landing/ClosingCta";
 import { Features } from "@/components/landing/Features";
 import { Hero } from "@/components/landing/Hero";
 import { HowItWorks } from "@/components/landing/HowItWorks";
+import { LastRunBand } from "@/components/landing/LastRunBand";
 import { LiveBoard } from "@/components/landing/LiveBoard";
 import { TickerMarquee } from "@/components/landing/TickerMarquee";
 import { getLatestPipelineRun, getWatchlistOverview } from "@/db/queries";
@@ -41,8 +42,12 @@ export default async function LandingPage() {
 
       {dataAvailable ? (
         <>
+          {/* Directly under the hero on purpose: the headline claims the app
+              shows its work, and this is the work, before anything is
+              described. */}
+          <LastRunBand run={run} />
           <TickerMarquee rows={rows} />
-          <LiveBoard rows={rows} run={run} tickerCount={rows.length} />
+          <LiveBoard rows={rows} tickerCount={rows.length} />
         </>
       ) : (
         <DataUnavailableNote />
