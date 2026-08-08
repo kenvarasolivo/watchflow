@@ -28,8 +28,8 @@ export function SiteFooter() {
         <div className="lg:col-span-2">
           <Logo className="text-xl text-ink" />
           <p className="mt-3 max-w-sm text-sm leading-relaxed text-ink-secondary">
-            End-of-day watchlist analytics, fed by a scheduled ETL pipeline that logs every run
-            it makes — including the ones that went wrong.
+            End-of-day prices, next-session forecasts, and a run log that shows where every
+            number came from.
           </p>
         </div>
 

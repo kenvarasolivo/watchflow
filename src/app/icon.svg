@@ -1,0 +1,26 @@
+<!--
+  Browser tab / bookmark icon. Next's App Router picks this up from its filename
+  and emits the <link rel="icon"> for it, so nothing references it by hand.
+
+  The path is the owl from src/components/site/Logo.tsx, unchanged — keep the two
+  in step if the mark is ever redrawn.
+
+  Two departures from the header mark, both because a favicon renders at 16px on
+  a surface we do not control:
+
+   1. It sits on a leaf tile rather than being drawn in leaf on transparent. A
+      thin green mark on a transparent ground disappears into a dark tab strip;
+      the tile keeps contrast fixed in light and dark browser chrome.
+   2. The owl is knocked out in white, which lets the facial disc — the hole in
+      the evenodd path, and the detail that survives longest as the icon scales
+      down — read as leaf green against it.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <rect width="32" height="32" rx="7" fill="#0b6b3a" />
+  <path
+    transform="translate(2.2 2.085) scale(1.15)"
+    fill="#ffffff"
+    fill-rule="evenodd"
+    d="M12 2.2C6.9 2.2 2.7 6.4 2.7 11.5v1.6C2.7 18.2 6.9 22 12 22s9.3-3.8 9.3-8.9v-1.6c0-5.1-4.2-9.3-9.3-9.3Z M12 7.6c2.4-2.8 7-1.4 7 2.5 0 4.1-3.2 7.9-7 7.9S5 14.2 5 10.1c0-3.9 4.6-5.3 7-2.5Z M9.3 8.8a2 2 0 1 1 0 4 2 2 0 1 1 0-4Z M14.7 8.8a2 2 0 1 1 0 4 2 2 0 1 1 0-4Z M10.7 13.5h2.6L12 16.5Z"
+  />
+</svg>

@@ -41,14 +41,9 @@ export function LiveBoard({
   return (
     <section className="shell py-16 sm:py-24">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="eyebrow">Live from the last run</p>
-          <h2 className="display mt-3 max-w-xl text-3xl text-ink sm:text-4xl">
-            {withReturns.length > 0
-              ? "Biggest moves in the last session."
-              : "Tracked and waiting on the next run."}
-          </h2>
-        </div>
+        <h2 className="display max-w-xl text-3xl text-ink sm:text-4xl">
+          {withReturns.length > 0 ? "Biggest moves last session." : "Waiting on the next run."}
+        </h2>
         <Link
           href="/watchlist"
           className="w-fit rounded-full border border-hairline px-5 py-2.5 text-sm font-medium text-ink transition-colors hover:border-baseline hover:bg-subtle focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 focus-visible:outline-none"

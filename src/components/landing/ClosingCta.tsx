@@ -21,9 +21,7 @@ export function ClosingCta() {
             Add a ticker. The next run picks it up.
           </h2>
           <p className="mt-4 text-base leading-relaxed text-canvas/75">
-            The scheduled job backfills 400 days of history the first time it sees a symbol, then
-            goes incremental. Removing a ticker keeps its price history, so putting it back is
-            instant.
+            New symbols come with 400 days of history on their first run.
           </p>
         </div>
 

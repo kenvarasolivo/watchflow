@@ -21,6 +21,10 @@
  * the pupils and beak are solid again inside it. That means the mark needs no
  * background-colour prop: whatever surface it sits on shows through the disc,
  * so it inverts correctly on the green band and the ink band for free.
+ *
+ * The same path is copied into src/app/icon.svg for the favicon, which has to
+ * be a static file Next can find by name and so cannot import it. Redraw one,
+ * redraw the other.
  */
 export function OwlMark({ className = "size-6" }: { className?: string }) {
   return (

@@ -30,15 +30,15 @@ function Underline() {
 }
 
 /**
- * The hero: the sentence, and nothing else.
+ * The hero: the promise, then what the reader gets for it.
  *
- * The last run used to sit here as a panel in a second column, which capped how
- * large the headline could get and made the first viewport a layout instead of
- * a statement. It now has its own band directly below — see `LastRunBand`.
+ * "Shows its work" is the promise, and the subheading is what redeems it —
+ * prices, a forecast, and the forecast's own scorecard. The subheading used to
+ * describe the machinery instead (a scheduled ETL job publishing its run log),
+ * which left the headline making a claim that nothing under it cashed in.
  *
- * The badge stays. It is one line of text, and it is the whole argument of the
- * product: the reader is told how stale the numbers are before being told
- * anything else. Without it the first screen is pure claim.
+ * The badge stays. One line of text, and the only claim on this screen the
+ * reader can check immediately: how stale the numbers are.
  */
 export function Hero({ run }: { run: PipelineStatus | null }) {
   return (
@@ -70,9 +70,9 @@ export function Hero({ run }: { run: PipelineStatus | null }) {
           </span>
         </h1>
 
-        <p className="mt-9 max-w-2xl text-lg leading-relaxed text-ink-secondary sm:text-xl">
-          Daily OHLCV for every ticker you track, loaded by a scheduled ETL job that publishes
-          its own run log right next to the numbers it produced.
+        <p className="mt-9 max-w-xl text-lg leading-relaxed text-ink-secondary sm:text-xl">
+          Daily prices, a forecast for the next session, and the scorecard showing how often
+          that forecast was right.
         </p>
 
         <div className="mt-11 flex flex-wrap items-center gap-3">
@@ -80,18 +80,18 @@ export function Hero({ run }: { run: PipelineStatus | null }) {
             href="/watchlist"
             className="rounded-full bg-ink px-7 py-3.5 text-base font-medium text-canvas transition-colors hover:bg-ink-secondary focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 focus-visible:outline-none"
           >
-            Open the dashboard
+            Open the watchlist
           </Link>
           <Link
-            href="/pipeline"
+            href="/ticker/AAPL"
             className="rounded-full border border-baseline bg-canvas/70 px-7 py-3.5 text-base font-medium text-ink backdrop-blur-sm transition-colors hover:border-ink-muted hover:bg-canvas focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 focus-visible:outline-none"
           >
-            Read the run log
+            See a forecast
           </Link>
         </div>
 
         <p className="mt-8 text-sm text-ink-muted">
-          No accounts. Prices are end-of-day, never real time.
+          Free, no signup. End-of-day prices — not investment advice.
         </p>
       </div>
     </section>

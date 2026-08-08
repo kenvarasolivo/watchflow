@@ -29,11 +29,11 @@ const dmMono = DM_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Watchflow — watchlist analytics with a visible pipeline",
+    default: "Watchflow — your stocks, and tomorrow's range",
     template: "%s · Watchflow",
   },
   description:
-    "Daily OHLCV ingestion, derived metrics and watchlist performance analytics, fed by a scheduled ETL pipeline that logs every run.",
+    "Track stocks with end-of-day prices, a forecast for the next session, and a public record of how often that forecast was right. Free, no signup.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -44,7 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <body className="flex min-h-screen flex-col bg-canvas text-ink">
         {/* Keyboard users land here first; the header nav is three links deep on
-            every page, and the landing page puts a lot of prose above the app. */}
+            every page, and the landing page puts several sections above the app. */}
         <a
           href="#main"
           className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-ink focus:px-4 focus:py-2 focus:text-sm focus:text-canvas"
