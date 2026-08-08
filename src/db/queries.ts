@@ -57,6 +57,44 @@ export type PerformanceRow = {
   observations: number;
 };
 
+export type NewsHeadline = {
+  articleId: string;
+  title: string;
+  publisher: string | null;
+  link: string;
+  publishedAt: string;
+};
+
+/** A forecast as made, plus its verdict once the target session settled. */
+export type ForecastRow = {
+  targetDate: string;
+  basisDate: string;
+  basisClose: number;
+  central: number;
+  low: number;
+  high: number;
+  /** Half-width of the band in percent — `high / central - 1`. */
+  sigmaPct: number;
+  driftPct: number;
+  sampleSize: number;
+  actualClose: number | null;
+  actualReturnPct: number | null;
+  withinBand: boolean | null;
+  errorPct: number | null;
+};
+
+/** Realised calibration of every scored forecast for one ticker. */
+export type ForecastRecord = {
+  scored: number;
+  hits: number;
+  /** Share of scored forecasts whose close landed inside the band, 0–100. */
+  hitRatePct: number | null;
+  /** Mean |miss| of the central estimate, in percent. */
+  meanAbsErrorPct: number | null;
+  /** Same, for the naive "tomorrow closes where today closed" baseline. */
+  baselineAbsErrorPct: number | null;
+};
+
 export type PipelineStatus = {
   id: number;
   startedAt: string;
@@ -306,6 +344,221 @@ export async function getTickerSeries(ticker: string, range: Range): Promise<Ser
     ma20: r.ma_20,
     ma50: r.ma_50,
     volatility30d: r.volatility_30d,
+  }));
+}
+
+/**
+ * The last `sessions` bars for one ticker, oldest first.
+ *
+ * Deliberately separate from `getTickerSeries`, which is bounded by the range
+ * the reader picked. The session explainer needs a *fixed* lookback — its
+ * "volume against the 30-session average" has to mean the same thing whether
+ * the chart above it is showing a month or a year, and a range-bounded query
+ * would silently change the baseline under it.
+ */
+export async function getRecentSeries(ticker: string, sessions = 70): Promise<SeriesPoint[]> {
+  const db = getDb();
+
+  const result = await db.execute<{
+    date: string;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+    daily_return: number | null;
+    ma_20: number | null;
+    ma_50: number | null;
+    volatility_30d: number | null;
+  }>(sql`
+    select * from (
+      select
+        p.date                    as date,
+        p.open::float8            as open,
+        p.high::float8            as high,
+        p.low::float8             as low,
+        p.close::float8           as close,
+        p.volume::float8          as volume,
+        m.daily_return::float8    as daily_return,
+        m.ma_20::float8           as ma_20,
+        m.ma_50::float8           as ma_50,
+        m.volatility_30d::float8  as volatility_30d
+      from prices p
+      left join metrics m on m.ticker = p.ticker and m.date = p.date
+      where p.ticker = ${ticker}
+      order by p.date desc
+      limit ${sessions}
+    ) recent
+    order by date asc
+  `);
+
+  return result.rows.map((r) => ({
+    date: r.date,
+    open: r.open,
+    high: r.high,
+    low: r.low,
+    close: r.close,
+    volume: r.volume,
+    dailyReturn: r.daily_return,
+    ma20: r.ma_20,
+    ma50: r.ma_50,
+    volatility30d: r.volatility_30d,
+  }));
+}
+
+/**
+ * Headlines for one ticker, newest first.
+ *
+ * No date filter here on purpose. The caller knows which session it is
+ * annotating and how wide a window around it counts as "around" — see
+ * `lib/attribution.ts` — and pushing that judgement into SQL would spread one
+ * decision across two layers.
+ */
+export async function getTickerNews(ticker: string, limit = 24): Promise<NewsHeadline[]> {
+  const db = getDb();
+
+  const result = await db.execute<{
+    article_id: string;
+    title: string;
+    publisher: string | null;
+    link: string;
+    published_at: string;
+  }>(sql`
+    select article_id, title, publisher, link, published_at
+    from news
+    where ticker = ${ticker}
+    order by published_at desc
+    limit ${limit}
+  `);
+
+  return result.rows.map((r) => ({
+    articleId: r.article_id,
+    title: r.title,
+    publisher: r.publisher,
+    link: r.link,
+    publishedAt: String(r.published_at),
+  }));
+}
+
+/**
+ * The standing forecast: the most recent one whose session has not settled.
+ *
+ * Keyed on `actual_close is null` rather than on comparing `target_date` to the
+ * clock. The pipeline decides what "the next session" is using a market
+ * calendar; the web host only knows wall-clock time, and on a holiday the two
+ * disagree. Whether the outcome has been graded is the same question stated in
+ * terms this layer can actually answer.
+ */
+export async function getStandingForecast(ticker: string): Promise<ForecastRow | null> {
+  const rows = await selectForecasts(sql`
+    where ticker = ${ticker} and actual_close is null
+    order by target_date desc
+    limit 1
+  `);
+  return rows[0] ?? null;
+}
+
+/** The most recently graded forecasts, newest first — the visible track record. */
+export async function getScoredForecasts(ticker: string, limit = 10): Promise<ForecastRow[]> {
+  return selectForecasts(sql`
+    where ticker = ${ticker} and actual_close is not null
+    order by target_date desc
+    limit ${limit}
+  `);
+}
+
+/**
+ * Calibration over every graded forecast for one ticker.
+ *
+ * `baselineAbsErrorPct` is the point of this query. On its own, "the central
+ * estimate missed by 1.2%" is a number with nothing to be compared against, and
+ * a reader has no way to tell a useful model from a useless one. The random
+ * walk — "tomorrow closes exactly where today closed" — is the benchmark any
+ * next-day forecast has to beat to have earned its place, and it is computed
+ * from the same rows over the same sessions. When the model is not beating it,
+ * the UI says so.
+ */
+export async function getForecastRecord(ticker: string): Promise<ForecastRecord> {
+  const db = getDb();
+
+  const result = await db.execute<{
+    scored: number;
+    hits: number;
+    hit_rate_pct: number | null;
+    mean_abs_error_pct: number | null;
+    baseline_abs_error_pct: number | null;
+  }>(sql`
+    select
+      count(*)::int                                              as scored,
+      count(*) filter (where within_band)::int                   as hits,
+      (avg(case when within_band then 100.0 else 0.0 end))::float8 as hit_rate_pct,
+      avg(abs(error_pct))::float8                                as mean_abs_error_pct,
+      avg(abs(actual_return_pct))::float8                        as baseline_abs_error_pct
+    from predictions
+    where ticker = ${ticker} and actual_close is not null
+  `);
+
+  const row = result.rows[0];
+  return {
+    scored: Number(row?.scored ?? 0),
+    hits: Number(row?.hits ?? 0),
+    hitRatePct: row?.hit_rate_pct ?? null,
+    meanAbsErrorPct: row?.mean_abs_error_pct ?? null,
+    baselineAbsErrorPct: row?.baseline_abs_error_pct ?? null,
+  };
+}
+
+/** Shared projection for the three forecast reads above. */
+async function selectForecasts(tail: ReturnType<typeof sql>): Promise<ForecastRow[]> {
+  const db = getDb();
+
+  const result = await db.execute<{
+    target_date: string;
+    basis_date: string;
+    basis_close: number;
+    central: number;
+    low: number;
+    high: number;
+    sigma_pct: number;
+    drift_pct: number;
+    sample_size: number;
+    actual_close: number | null;
+    actual_return_pct: number | null;
+    within_band: boolean | null;
+    error_pct: number | null;
+  }>(sql`
+    select
+      target_date              as target_date,
+      basis_date               as basis_date,
+      basis_close::float8      as basis_close,
+      central::float8          as central,
+      low::float8              as low,
+      high::float8             as high,
+      sigma_pct::float8        as sigma_pct,
+      drift_pct::float8        as drift_pct,
+      sample_size              as sample_size,
+      actual_close::float8     as actual_close,
+      actual_return_pct::float8 as actual_return_pct,
+      within_band              as within_band,
+      error_pct::float8        as error_pct
+    from predictions
+    ${tail}
+  `);
+
+  return result.rows.map((r) => ({
+    targetDate: r.target_date,
+    basisDate: r.basis_date,
+    basisClose: r.basis_close,
+    central: r.central,
+    low: r.low,
+    high: r.high,
+    sigmaPct: r.sigma_pct,
+    driftPct: r.drift_pct,
+    sampleSize: Number(r.sample_size),
+    actualClose: r.actual_close,
+    actualReturnPct: r.actual_return_pct,
+    withinBand: r.within_band,
+    errorPct: r.error_pct,
   }));
 }
 

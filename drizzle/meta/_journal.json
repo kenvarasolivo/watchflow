@@ -15,6 +15,13 @@
       "when": 1785169100152,
       "tag": "0001_volatile_onslaught",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786177997735,
+      "tag": "0002_great_squadron_sinister",
+      "breakpoints": true
     }
   ]
 }

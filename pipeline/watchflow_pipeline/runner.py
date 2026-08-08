@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import traceback
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy.engine import Engine
@@ -13,7 +13,9 @@ from sqlalchemy.engine import Engine
 from . import db
 from .config import Settings
 from .extract import ExtractError, build_session, fetch_batch, plan_batches
+from .forecast import build_forecast, forecasts_to_rows
 from .models import Rejection
+from .news import articles_to_rows, fetch_news
 from .transform import (
     WARMUP_BARS,
     bars_to_price_rows,
@@ -44,11 +46,24 @@ class RunResult:
     notes: list[str] = field(default_factory=list)
     rejections: list[Rejection] = field(default_factory=list)
 
+    # Enrichment counters. These are reported in the run log but never fold
+    # into `rows_upserted`, which stays a count of price bars — the number the
+    # run log has always meant by it, and the one the UI charts against.
+    headlines_upserted: int = 0
+    forecasts_written: int = 0
+    forecasts_scored: int = 0
+
     def error_summary(self) -> str | None:
         return "\n".join(self.errors) if self.errors else None
 
     def details(self) -> str | None:
         lines = list(self.notes)
+        if self.headlines_upserted or self.forecasts_written or self.forecasts_scored:
+            lines.append(
+                f"Enrichment: {self.headlines_upserted} headline(s), "
+                f"{self.forecasts_written} forecast(s) written, "
+                f"{self.forecasts_scored} scored against the real close."
+            )
         if self.rejections:
             lines.append(f"Rejected rows ({len(self.rejections)}), first 20:")
             lines.extend(f"  - {rejection}" for rejection in self.rejections[:20])
@@ -135,6 +150,8 @@ def _execute(engine: Engine, settings: Settings, today: date, result: RunResult)
             engine, settings, ticker, raw_by_ticker.get(ticker, []), result, today
         )
 
+    _collect_news(engine, settings, tickers, session, result)
+
 
 def _process_ticker(
     engine: Engine,
@@ -210,6 +227,21 @@ def _process_ticker(
             closes = db.fetch_closes_since(conn, ticker, warmup_start)
             metric_rows = metrics_to_rows(compute_metrics(ticker, closes, emit_from=first_new))
             db.upsert_metrics(conn, metric_rows)
+
+            # Grade first, forecast second. Scoring reads the bars that just
+            # landed, so any standing forecast whose session settled in this
+            # run is judged against the same close the chart will show. Doing
+            # it after the new forecast is written would be equivalent here —
+            # the two touch different rows — but this order keeps the invariant
+            # obvious: a forecast is graded before its successor is made.
+            scored = db.score_predictions(conn, ticker)
+
+            forecast = build_forecast(ticker, closes)
+            written = (
+                db.upsert_predictions(conn, forecasts_to_rows([forecast]))
+                if forecast is not None
+                else 0
+            )
     except Exception as exc:  # noqa: BLE001 - one ticker must not stop the rest
         message = f"{ticker}: load failed: {type(exc).__name__}: {exc}"
         logger.error("%s", message)
@@ -217,13 +249,76 @@ def _process_ticker(
         return
 
     result.rows_upserted += upserted
+    result.forecasts_scored += scored
+    result.forecasts_written += written
     result.tickers_processed += 1
+
+    if forecast is None:
+        result.notes.append(
+            f"{ticker}: not enough history for a next-session forecast yet."
+        )
+
     logger.info(
-        "%s: upserted %d price row(s) and %d metric row(s)",
+        "%s: upserted %d price row(s) and %d metric row(s); "
+        "%d forecast(s) scored, %d written",
         ticker,
         upserted,
         len(metric_rows),
+        scored,
+        written,
     )
+
+
+def _collect_news(
+    engine: Engine,
+    settings: Settings,
+    tickers: list[str],
+    session,
+    result: RunResult,
+) -> None:
+    """Fetch and store headlines for every ticker, then trim the old ones.
+
+    Runs after the price loop rather than inside it so the whole enrichment
+    step is one skippable block, and so a watchlist's worth of extra requests
+    is only issued once every bar has already been safely committed.
+
+    Nothing here can fail a run. Headlines are context for a move the prices
+    already describe; losing them costs the ticker page an annotation, and
+    trading a successful price load for a red run over that would be the wrong
+    bargain. Failures land in the run log's notes so they stay visible.
+    """
+    if not settings.fetch_news:
+        logger.info("News collection disabled (WATCHFLOW_FETCH_NEWS)")
+        return
+
+    if settings.dry_run:
+        logger.info("Dry run: skipping news collection")
+        return
+
+    failures: list[str] = []
+
+    for ticker in tickers:
+        articles = fetch_news(ticker, session)
+        if not articles:
+            continue
+        try:
+            with engine.begin() as conn:
+                result.headlines_upserted += db.upsert_news(conn, articles_to_rows(articles))
+        except Exception as exc:  # noqa: BLE001 - soft by contract
+            logger.warning("%s: storing headlines failed: %s", ticker, exc)
+            failures.append(f"{ticker} ({type(exc).__name__})")
+
+    if failures:
+        result.notes.append("Headline load failed for: " + ", ".join(failures))
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=settings.news_retention_days)
+    try:
+        with engine.begin() as conn:
+            pruned = db.prune_news(conn, cutoff)
+        if pruned:
+            logger.info("Pruned %d headline(s) published before %s", pruned, cutoff.date())
+    except Exception as exc:  # noqa: BLE001 - soft by contract
+        logger.warning("Pruning old headlines failed: %s", exc)
 
 
 def _resolve_status(result: RunResult) -> str:

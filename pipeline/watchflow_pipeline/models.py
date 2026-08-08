@@ -7,7 +7,7 @@ one ticker must not cost us the other nineteen tickers' data.
 
 from __future__ import annotations
 
-from datetime import date as Date
+from datetime import date as Date, datetime
 from decimal import Decimal
 from typing import Annotated
 
@@ -85,6 +85,67 @@ class MetricRow(BaseModel):
     ma_20: Decimal | None = None
     ma_50: Decimal | None = None
     volatility_30d: float | None = None
+
+
+class NewsArticle(BaseModel):
+    """One headline, already flattened out of whichever payload shape it came in.
+
+    Every field except `publisher` is required. A headline without a title, a
+    link or a publish time cannot do the one job it exists for — sitting next to
+    a dated session as context — so `news.normalise_article` drops it rather
+    than storing a row the UI would have to special-case.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    ticker: str = Field(min_length=1, max_length=16)
+    article_id: str = Field(min_length=1, max_length=64)
+    title: str = Field(min_length=1, max_length=500)
+    publisher: str | None = Field(default=None, max_length=128)
+    link: str = Field(min_length=1)
+    published_at: datetime
+
+    @field_validator("ticker")
+    @classmethod
+    def _upper_ticker(cls, value: str) -> str:
+        return value.strip().upper()
+
+
+class ForecastRow(BaseModel):
+    """A one-session-ahead band, before its outcome is known.
+
+    The scoring columns (`actual_close`, `within_band`, …) are deliberately
+    absent: this model represents the forecast *as made*, and a later run fills
+    the outcome in by UPDATE. Carrying nullable outcome fields here would invite
+    writing a prediction and its result in the same statement, which is exactly
+    the thing that would make the hit rate meaningless.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    ticker: str = Field(min_length=1, max_length=16)
+    target_date: Date
+    basis_date: Date
+    basis_close: PositivePrice
+    central: PositivePrice
+    low: PositivePrice
+    high: PositivePrice
+    sigma_pct: float = Field(gt=0)
+    drift_pct: float
+    sample_size: int = Field(ge=1)
+
+    @model_validator(mode="after")
+    def _band_is_ordered(self) -> "ForecastRow":
+        if not (self.low <= self.central <= self.high):
+            raise ValueError(
+                f"band is not ordered: low {self.low}, central {self.central}, "
+                f"high {self.high}"
+            )
+        if self.target_date <= self.basis_date:
+            raise ValueError(
+                f"target {self.target_date} must be after basis {self.basis_date}"
+            )
+        return self
 
 
 class Rejection(BaseModel):

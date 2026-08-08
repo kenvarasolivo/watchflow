@@ -19,6 +19,7 @@ pipeline works and to make its output legible.
 - [Architecture](#architecture)
 - [The TLS fingerprint problem](#the-tls-fingerprint-problem)
 - [Pipeline design](#pipeline-design)
+- [Explaining and forecasting](#explaining-and-forecasting)
 - [Data model](#data-model)
 - [API](#api)
 - [Setup](#setup)
@@ -50,11 +51,13 @@ pipeline works and to make its output legible.
                      │  │  Pydantic row validation │  │
                      │  │  NYSE calendar gap check │  │
                      │  │  returns · MA20/50 · vol │  │
+                     │  │  next-session band       │  │
                      │  └───────────┬──────────────┘  │
                      │              ▼                 │
                      │  ┌──────────────────────────┐  │
                      │  │ LOAD                     │  │
                      │  │  ON CONFLICT DO UPDATE   │  │
+                     │  │  score matured forecasts │  │
                      │  │  + pipeline_runs log row │  │
                      │  └───────────┬──────────────┘  │
                      └──────────────┼─────────────────┘
@@ -63,6 +66,7 @@ pipeline works and to make its output legible.
                      │   Neon serverless Postgres     │
                      │  watchlists · watchlist_tickers│
                      │  prices · metrics              │
+                     │  news · predictions            │
                      │  pipeline_runs                 │
                      └──────────────┬─────────────────┘
                                     │  Drizzle ORM (read)
@@ -291,6 +295,112 @@ refetches it once settled. Counting it would paint every intraday run
 
 ---
 
+## Explaining and forecasting
+
+A chart tells you a stock moved 5%. It does not tell you whether that was a big
+move *for that stock*, whether it happened overnight or during the session, or
+what was being reported at the time. Two features close that gap, and both are
+built to be honest about what they can and cannot support.
+
+### The session breakdown
+
+Each ticker page describes its latest session in two visibly separate columns.
+
+**In the data** is arithmetic on the stored bars, computed at render time by
+[`src/lib/attribution.ts`](src/lib/attribution.ts). Each rule returns an
+observation with a weight — roughly "how many times more extreme than normal is
+this" — and only the top four are shown, so a quiet session yields one line and
+a violent one yields four. Printing every rule every time trains the reader to
+skip the block, because the sentence that matters ends up buried under three
+that say "volume was about average".
+
+The rules cover move size against the stock's own typical session, the
+overnight gap versus intraday drift, volume against its 30-session average,
+crossings of the 20-day and 20/50 moving averages, window highs and lows,
+same-direction streaks, and unusually wide intraday ranges.
+
+The gap rule is the one worth singling out. The split between "already priced at
+the open" and "built through the session" is the most useful thing a daily bar
+can tell you, because the two have genuinely different causes — an overnight
+release versus intraday flow — and `open` against the previous `close`
+separates them cleanly.
+
+**Reported around this session** is headlines, scraped by the pipeline and
+matched to the session purely by time. The window runs from the evening before
+through the following morning, which covers news released after the previous
+close, news during the session, and the coverage written in the hours after.
+Yahoo's per-ticker feed is loose enough that a third of what comes back is
+general market copy, so headlines that name the company are ranked first —
+but sector stories that never say "Nvidia" are kept rather than filtered, since
+they are often the real context.
+
+Nothing here claims causation, and the panel says so in the card rather than in
+a footnote somewhere else on the page. A headline published in the same window
+as a move is evidence of what was being reported, not proof of what caused it.
+
+### The next-session forecast
+
+[`pipeline/watchflow_pipeline/forecast.py`](pipeline/watchflow_pipeline/forecast.py)
+produces a one-session-ahead **range**, not a direction.
+
+That is a deliberate limit rather than a missing feature. Next-day direction in
+a liquid equity is close to a coin flip, and any model claiming otherwise from
+daily OHLCV is fitting noise. What *is* forecastable from daily bars is the
+**scale** of the next move: volatility clusters strongly, which is why the band
+width carries real information even though its centre barely does. So the
+headline number is the interval and the central estimate is a tick inside it.
+
+The band is `close × exp(µ ± σ)` over the trailing 30 sessions of log returns:
+
+- **Log returns, not simple returns.** The band is multiplicative, so it cannot
+  produce a negative price and is asymmetric in price space in the direction
+  real price distributions actually are.
+- **The drift is capped at ¼σ.** The sample mean of 30 daily returns has a
+  standard error of about `σ/√30` ≈ `0.18σ` — the same order as the mean itself.
+  Extrapolating it verbatim would read a number that is mostly estimation error
+  and would make the band chase momentum right at the turns.
+- **The window matches `metrics.volatility_30d`,** so the band and the
+  volatility figure beside it are two views of one number. The page quotes the
+  forecast's σ in both places rather than letting two nearly-equal estimates
+  disagree in the last decimal.
+- **The schedule is inferred from the ticker's own bars.** A symbol printing
+  weekend bars (`BTC-USD`) forecasts tomorrow; everything else uses the NYSE
+  calendar, so a Friday close forecasts Monday. Handing crypto the equity
+  calendar would grade a one-session band against three days of movement.
+
+**Every forecast is scored.** This is the half that makes it falsifiable. Rows
+are written to `predictions` before the outcome exists, and a later run fills in
+`actual_close`, `within_band` and `error_pct` by comparing against the real bar.
+A forecast recomputed at render time would be unfalsifiable — always reasonable,
+because always fitted to what already happened.
+
+The UI therefore shows the realised hit rate against the ~68% a one-sigma band
+should achieve, and declines to draw a verdict below 20 graded forecasts, where
+the confidence interval is still too wide for the number to mean anything. It
+also compares the midpoint's average miss against the random walk — "tomorrow
+closes where today closed" — which is the benchmark any next-day forecast must
+beat to have earned its place. When the model is losing to it, the card says so
+in words.
+
+Scoring re-runs when a stored close no longer matches the price table, because
+the load step deliberately refetches a few days of tail and a verdict reached
+against a provisional close has to be able to change with it.
+
+### Failure behaviour
+
+News is context; prices are the product. A run that loads every bar and gets a
+429 on the news endpoint has succeeded. Nothing in
+[`news.py`](pipeline/watchflow_pipeline/news.py) raises into the run's error
+list, and no news failure can change a run's status — failures land in the run
+log's notes so they stay visible. Set `WATCHFLOW_FETCH_NEWS=false` (or pass
+`--no-news`) to skip the step entirely; it is the only part of a run that can be
+switched off without changing what the charts show.
+
+A ticker with under ~30 sessions of history simply gets no forecast, which is
+noted in the run log rather than treated as an error.
+
+---
+
 ## Data model
 
 `prices` (raw ingestion) and `metrics` (analytics) are **separate tables**,
@@ -309,6 +419,12 @@ watchlists          id · name (unique) · created_at
 watchlist_tickers   (watchlist_id → watchlists.id, ticker) PK · name · added_at
 prices              (ticker, date) PK · open · high · low · close · volume · updated_at
 metrics             (ticker, date) PK · daily_return · ma_20 · ma_50 · volatility_30d · updated_at
+news                (ticker, article_id) PK · title · publisher · link
+                    · published_at · fetched_at
+predictions         (ticker, target_date) PK · basis_date · basis_close · central
+                    · low · high · sigma_pct · drift_pct · sample_size
+                    · actual_close · actual_return_pct · within_band · error_pct
+                    · scored_at · created_at · updated_at
 pipeline_runs       id · started_at · finished_at · tickers_processed · rows_upserted
                     · rows_rejected · status · error_summary · details · trigger
 ```
@@ -320,6 +436,20 @@ query, so the browser still receives real numbers rather than strings.
 The extract set is defined as the **union of all watchlists' tickers**. v1 has
 exactly one watchlist, but writing it this way means adding more later needs no
 pipeline change.
+
+`news` is keyed per ticker rather than globally. The same article routinely
+mentions several symbols, and the only query anyone runs is "headlines for
+TICKER around DATE" — a shared article table plus a join table would normalise
+the title at the cost of turning that into a three-way join, for a corpus
+measured in hundreds of rows. `article_id` is a hash of the canonical URL rather
+than Yahoo's own id, because that field has been renamed and reformatted across
+yfinance releases while the URL has stayed stable.
+
+`predictions` is keyed `(ticker, target_date)` — the session being forecast, not
+the moment of forecasting — so two runs on the same day revise one row instead
+of stacking duplicates. Re-forecasting clears the scoring columns, since a
+revised band has not been graded and inheriting the previous row's verdict would
+credit new numbers with an old outcome.
 
 `watchlist_tickers.name` holds the company name (`AAPL` → `Apple Inc.`) as
 resolved from Yahoo's search endpoint when the ticker was added. It is nullable
@@ -427,6 +557,8 @@ Full annotated list in [`.env.example`](.env.example). The essentials:
 | `WATCHFLOW_OVERLAP_DAYS` | pipeline | `5` | Days re-fetched before the watermark |
 | `WATCHFLOW_BATCH_SIZE` | pipeline | `12` | Tickers per yfinance call |
 | `WATCHFLOW_MAX_RETRIES` | pipeline | `5` | Attempts before a batch is abandoned |
+| `WATCHFLOW_FETCH_NEWS` | pipeline | `true` | Collect headlines. One extra request per ticker |
+| `WATCHFLOW_NEWS_RETENTION_DAYS` | pipeline | `400` | How long headlines are kept |
 
 ---
 
@@ -489,6 +621,10 @@ python -m watchflow_pipeline --full-refresh
 
 # Reproduce a past run
 python -m watchflow_pipeline --as-of 2026-07-24
+
+# Prices, metrics and forecasts only — skip the per-ticker news requests.
+# The first thing to reach for if Yahoo starts throttling a large watchlist.
+python -m watchflow_pipeline --no-news
 ```
 
 **Prices are split- and dividend-adjusted** (`auto_adjust=True`). Unadjusted
@@ -512,7 +648,7 @@ date. The trade-off is the one `--full-refresh` exists for.
 ```bash
 cd pipeline
 pip install -r requirements-dev.txt
-pytest -q                          # 103 tests
+pytest -q                          # 160 tests
 ```
 
 Covered: NYSE calendar edge cases (Good Friday, weekend observance, the New
@@ -521,6 +657,14 @@ metric correctness against independently computed values, warm-up windowing,
 batch planning, retry classification, yfinance response shapes (flat and both
 MultiIndex orderings), NaN batch-padding vs. genuinely malformed rows, and
 run-status resolution.
+
+The forecast and news modules add: band ordering and quantisation, the drift
+cap under a hard trend, windowing (old turbulence must not widen today's band),
+refusal on degenerate volatility, seven-day instruments targeting tomorrow
+while equities skip the weekend, and both yfinance news payload shapes —
+flat/legacy and nested/current — including timestamp flavours, URL-derived ids,
+de-duplication and the rejection of headlines missing a title, link or publish
+time.
 
 Idempotency is verified at two levels:
 
@@ -606,10 +750,14 @@ invents a relationship the data does not contain.
 ## Scope
 
 **In:** watchlist CRUD, daily OHLCV ingestion, derived metrics, per-ticker
-charts, ranked watchlist performance, pipeline observability.
+charts, ranked watchlist performance, pipeline observability, session
+attribution with scraped headlines, and a scored next-session forecast range.
 
 **Out, deliberately:** multi-user accounts and auth; real-time or intraday
 prices (daily granularity is sufficient and far simpler); trading or order
-execution of any kind; backtesting and strategy simulation.
+execution of any kind; backtesting and strategy simulation; any claim that a
+headline *caused* a move, or that next-day direction is predictable — see
+[Explaining and forecasting](#explaining-and-forecasting) for why both are
+stated as limits rather than treated as missing features.
 
 Not investment advice. Prices are end-of-day and can be wrong.

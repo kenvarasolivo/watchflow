@@ -30,6 +30,26 @@ def _float(name: str, default: float) -> float:
         raise ConfigError(f"{name} must be a number, got {raw!r}") from exc
 
 
+#: Accepted spellings for a boolean env var. Anything else is a typo worth
+#: raising on rather than quietly reading as False — silently disabling news
+#: because someone wrote "yes" would look identical to Yahoo returning nothing.
+_TRUE = frozenset({"1", "true", "t", "yes", "y", "on"})
+_FALSE = frozenset({"0", "false", "f", "no", "n", "off"})
+
+
+def _bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name, "").strip().lower()
+    if not raw:
+        return default
+    if raw in _TRUE:
+        return True
+    if raw in _FALSE:
+        return False
+    raise ConfigError(
+        f"{name} must be one of {sorted(_TRUE | _FALSE)}, got {raw!r}"
+    )
+
+
 def normalise_database_url(url: str) -> str:
     """Make a Neon connection string usable by SQLAlchemy + psycopg 3.
 
@@ -74,6 +94,16 @@ class Settings:
     #: distinguishable in the UI.
     trigger: str = "manual"
 
+    #: Fetch headlines alongside prices. One extra request per ticker, and the
+    #: only part of a run that can be switched off without changing what the
+    #: charts show — so it is the first thing to disable if Yahoo starts
+    #: throttling a large watchlist.
+    fetch_news: bool = True
+
+    #: Headline retention. A year matches the longest range the UI can show;
+    #: older rows can only ever be read by a query that does not exist.
+    news_retention_days: int = 400
+
     #: Ignore stored watermarks and refetch `backfill_days` for every ticker.
     #: Needed after a split, because Yahoo retroactively adjusts *all* history
     #: and the usual few-day overlap would leave old bars unadjusted.
@@ -101,4 +131,6 @@ class Settings:
             backoff_base_seconds=_float("WATCHFLOW_BACKOFF_BASE_SECONDS", 1.5),
             batch_size=_int("WATCHFLOW_BATCH_SIZE", 12),
             trigger=os.environ.get("WATCHFLOW_TRIGGER", "manual").strip() or "manual",
+            fetch_news=_bool("WATCHFLOW_FETCH_NEWS", True),
+            news_retention_days=_int("WATCHFLOW_NEWS_RETENTION_DAYS", 400),
         )

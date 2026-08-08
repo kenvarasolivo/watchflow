@@ -8,12 +8,13 @@ it is the TypeScript one.
 
 from __future__ import annotations
 
-from datetime import date as Date
+from datetime import date as Date, datetime as DateTimeValue
 from decimal import Decimal
 from typing import Any, Iterable, Iterator, Sequence
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     Column,
     Date as SADate,
     DateTime,
@@ -70,6 +71,40 @@ metrics = Table(
     Column("ma_20", Numeric(18, 6)),
     Column("ma_50", Numeric(18, 6)),
     Column("volatility_30d", Numeric(12, 6)),
+    Column("updated_at", DateTime(timezone=True)),
+)
+
+news = Table(
+    "news",
+    metadata,
+    Column("ticker", String(16), primary_key=True),
+    Column("article_id", String(64), primary_key=True),
+    Column("title", Text, nullable=False),
+    Column("publisher", String(128)),
+    Column("link", Text, nullable=False),
+    Column("published_at", DateTime(timezone=True), nullable=False),
+    Column("fetched_at", DateTime(timezone=True)),
+)
+
+predictions = Table(
+    "predictions",
+    metadata,
+    Column("ticker", String(16), primary_key=True),
+    Column("target_date", SADate, primary_key=True),
+    Column("basis_date", SADate, nullable=False),
+    Column("basis_close", Numeric(18, 6), nullable=False),
+    Column("central", Numeric(18, 6), nullable=False),
+    Column("low", Numeric(18, 6), nullable=False),
+    Column("high", Numeric(18, 6), nullable=False),
+    Column("sigma_pct", Numeric(12, 6), nullable=False),
+    Column("drift_pct", Numeric(12, 6), nullable=False),
+    Column("sample_size", Integer, nullable=False),
+    Column("actual_close", Numeric(18, 6)),
+    Column("actual_return_pct", Numeric(12, 6)),
+    Column("within_band", Boolean),
+    Column("error_pct", Numeric(12, 6)),
+    Column("scored_at", DateTime(timezone=True)),
+    Column("created_at", DateTime(timezone=True)),
     Column("updated_at", DateTime(timezone=True)),
 )
 
@@ -223,6 +258,137 @@ def upsert_metrics(conn: Connection, rows: Sequence[dict[str, Any]]) -> int:
         conn.execute(stmt)
         total += len(chunk)
     return total
+
+
+def upsert_news(conn: Connection, rows: Sequence[dict[str, Any]]) -> int:
+    """Idempotent load of headlines.
+
+    The title and publisher are refreshed on conflict because outlets do edit
+    headlines after publication, and the stored copy should track the article it
+    links to. `published_at` is deliberately *not* updated: it is what the
+    headline is matched against a trading session by, and letting it drift would
+    silently re-file an old story under a newer day's move.
+    """
+    if not rows:
+        return 0
+
+    total = 0
+    for chunk in _chunks(rows, CHUNK_SIZE):
+        stmt = pg_insert(news).values(list(chunk))
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["ticker", "article_id"],
+            set_={
+                "title": stmt.excluded.title,
+                "publisher": stmt.excluded.publisher,
+                "link": stmt.excluded.link,
+                "fetched_at": func.now(),
+            },
+        )
+        conn.execute(stmt)
+        total += len(chunk)
+    return total
+
+
+def upsert_predictions(conn: Connection, rows: Sequence[dict[str, Any]]) -> int:
+    """Write or revise the standing forecast for a future session.
+
+    Two runs on the same day revise one row rather than stacking up duplicates,
+    because the primary key is ``(ticker, target_date)`` — the session being
+    forecast, not the moment of forecasting.
+
+    The scoring columns are cleared on conflict. A revised forecast has not been
+    graded yet, and leaving the previous row's verdict attached would credit the
+    new numbers with an old outcome. In practice this only fires for a forecast
+    whose session has not settled, since a scored row's target date is in the
+    past and no longer the next trading day.
+    """
+    if not rows:
+        return 0
+
+    total = 0
+    for chunk in _chunks(rows, CHUNK_SIZE):
+        stmt = pg_insert(predictions).values(list(chunk))
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["ticker", "target_date"],
+            set_={
+                "basis_date": stmt.excluded.basis_date,
+                "basis_close": stmt.excluded.basis_close,
+                "central": stmt.excluded.central,
+                "low": stmt.excluded.low,
+                "high": stmt.excluded.high,
+                "sigma_pct": stmt.excluded.sigma_pct,
+                "drift_pct": stmt.excluded.drift_pct,
+                "sample_size": stmt.excluded.sample_size,
+                "actual_close": None,
+                "actual_return_pct": None,
+                "within_band": None,
+                "error_pct": None,
+                "scored_at": None,
+                "updated_at": func.now(),
+            },
+        )
+        conn.execute(stmt)
+        total += len(chunk)
+    return total
+
+
+def score_predictions(conn: Connection, ticker: str) -> int:
+    """Grade every forecast whose target session now has a real close.
+
+    This is the half that makes the forecast falsifiable: the band was written
+    before the outcome existed, and this compares it against what actually
+    happened without touching the band itself.
+
+    Rows already scored are re-scored when the stored close no longer matches
+    the price table. That is not paranoia — the load step deliberately refetches
+    and upserts a few days of tail because Yahoo revises recent bars, so a
+    verdict reached against a provisional close has to be able to change with
+    it. ``IS DISTINCT FROM`` rather than ``!=`` so a previously unscored row
+    (NULL) is picked up by the same predicate.
+    """
+    stmt = (
+        predictions.update()
+        .where(
+            predictions.c.ticker == ticker,
+            prices.c.ticker == predictions.c.ticker,
+            prices.c.date == predictions.c.target_date,
+            predictions.c.actual_close.is_distinct_from(prices.c.close),
+        )
+        .values(
+            actual_close=prices.c.close,
+            actual_return_pct=(
+                (prices.c.close - predictions.c.basis_close)
+                / predictions.c.basis_close
+                * 100
+            ),
+            within_band=(
+                prices.c.close.between(predictions.c.low, predictions.c.high)
+            ),
+            error_pct=(
+                (prices.c.close - predictions.c.central) / predictions.c.central * 100
+            ),
+            scored_at=func.now(),
+            updated_at=func.now(),
+        )
+    )
+    return int(conn.execute(stmt).rowcount or 0)
+
+
+def prune_news(conn: Connection, before: DateTimeValue) -> int:
+    """Drop headlines published before ``before`` (an aware UTC datetime).
+
+    The table exists to annotate sessions the UI can actually show, and the
+    longest range on the ticker page is a year. Without this, an unbounded feed
+    of a dozen headlines per ticker per run would grow forever to serve reads
+    that never reach back that far.
+
+    Takes a datetime rather than a date so the cutoff is an absolute instant.
+    A bare date would be compared against `timestamptz` at midnight in whatever
+    the *server's* TimeZone happens to be, which makes the boundary depend on a
+    setting neither this pipeline nor the app controls.
+    """
+    stmt = news.delete().where(news.c.published_at < before)
+    return int(conn.execute(stmt).rowcount or 0)
 
 
 def start_run(conn: Connection, trigger: str) -> int:

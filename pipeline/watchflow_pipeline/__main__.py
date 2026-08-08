@@ -35,6 +35,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Extract and transform, but write nothing and log no run.",
     )
     parser.add_argument(
+        "--no-news",
+        action="store_true",
+        help=(
+            "Skip headline collection. Prices, metrics and forecasts still "
+            "load; the ticker pages just lose their news context. Worth "
+            "reaching for if Yahoo starts throttling a large watchlist, since "
+            "news costs one extra request per ticker."
+        ),
+    )
+    parser.add_argument(
         "--trigger",
         default=None,
         help='Label recorded on the run row (e.g. "schedule", "manual").',
@@ -64,6 +74,10 @@ def main(argv: list[str] | None = None) -> int:
         full_refresh=args.full_refresh,
         dry_run=args.dry_run,
         trigger=args.trigger or settings.trigger,
+        # The flag can only turn news off, never on: the env var is the
+        # deployment's standing choice and a CLI switch should not silently
+        # override an operator who disabled it there on purpose.
+        fetch_news=settings.fetch_news and not args.no_news,
     )
 
     as_of: date | None = None
@@ -81,12 +95,16 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     logger.info(
-        "Run %s: status=%s tickers=%d upserted=%d rejected=%d",
+        "Run %s: status=%s tickers=%d upserted=%d rejected=%d "
+        "headlines=%d forecasts=%d scored=%d",
         f"#{result.run_id}" if result.run_id else "(dry)",
         result.status,
         result.tickers_processed,
         result.rows_upserted,
         result.rows_rejected,
+        result.headlines_upserted,
+        result.forecasts_written,
+        result.forecasts_scored,
     )
 
     # A partial failure exits non-zero on purpose: a scheduled run that quietly

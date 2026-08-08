@@ -3,11 +3,22 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { Delta } from "@/components/Delta";
+import { ForecastCard } from "@/components/ForecastCard";
 import { PriceChart } from "@/components/PriceChart";
 import { RangeTabs } from "@/components/RangeTabs";
+import { SessionExplainer } from "@/components/SessionExplainer";
 import { SetupNotice } from "@/components/SetupNotice";
 import { StatTile } from "@/components/StatTile";
-import { getTickerName, getTickerSeries } from "@/db/queries";
+import {
+  getForecastRecord,
+  getRecentSeries,
+  getScoredForecasts,
+  getStandingForecast,
+  getTickerName,
+  getTickerNews,
+  getTickerSeries,
+} from "@/db/queries";
+import { explainLatestSession, headlinesAround } from "@/lib/attribution";
 import { companyName } from "@/lib/companies";
 import { formatPercent, formatPrice } from "@/lib/format";
 import { RANGE_LABELS, parseRange } from "@/lib/range";
@@ -56,16 +67,50 @@ export default async function TickerPage({
 
   let series;
   let storedName;
+  let recent;
+  let headlines;
+  let forecast;
+  let forecastRecord;
+  let gradedForecasts;
   try {
-    [series, storedName] = await Promise.all([
+    // One round trip's worth of latency for the whole page: every read below is
+    // independent, and the page is `force-dynamic`, so serialising them would
+    // add up to seven sequential hops to Neon on every request.
+    [
+      series,
+      storedName,
+      recent,
+      headlines,
+      forecast,
+      forecastRecord,
+      gradedForecasts,
+    ] = await Promise.all([
       getTickerSeries(ticker, range),
       getTickerName(ticker),
+      getRecentSeries(ticker),
+      getTickerNews(ticker),
+      getStandingForecast(ticker),
+      getForecastRecord(ticker),
+      getScoredForecasts(ticker, 8),
     ]);
   } catch (error) {
     return <SetupNotice error={error} />;
   }
 
   const name = companyName(ticker, storedName);
+
+  // Both derived from the fixed recent window rather than the selected range,
+  // so switching the chart between 1m and 1y does not silently restate what
+  // happened in the latest session.
+  //
+  // The forecast's sigma is handed to the explainer so the "typical session"
+  // it quotes is the same number the band below is built from, rather than a
+  // second estimate that differs in the last decimal.
+  const explanation = explainLatestSession(recent, forecast?.sigmaPct ?? null);
+  const sessionHeadlines =
+    explanation === null
+      ? []
+      : headlinesAround(headlines, explanation.date, { ticker, company: name });
   const latest = series.at(-1) ?? null;
   const first = series.at(0) ?? null;
 
@@ -141,6 +186,19 @@ export default async function TickerPage({
       </div>
 
       <PriceChart series={series} ticker={ticker} />
+
+      <SessionExplainer
+        explanation={explanation}
+        headlines={sessionHeadlines}
+        ticker={ticker}
+      />
+
+      <ForecastCard
+        forecast={forecast}
+        record={forecastRecord}
+        history={gradedForecasts}
+        ticker={ticker}
+      />
     </div>
   );
 }
