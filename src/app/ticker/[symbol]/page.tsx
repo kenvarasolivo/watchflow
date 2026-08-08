@@ -161,10 +161,17 @@ export default async function TickerPage({
       </header>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {/*
+          The only tinted tile in the grid. The other three are unsigned
+          quantities — a volatility or an average volume has no direction to
+          colour — so the tint doubles as "this is the one that says whether the
+          window was good or bad", which is what people came to the page for.
+        */}
         <StatTile
           label={`${RANGE_LABELS[range]} return`}
           value={formatPercent(windowReturn)}
           tone="delta"
+          tinted
           signedValue={windowReturn}
           hint={first && latest ? `${first.date} → ${latest.date}` : undefined}
         />

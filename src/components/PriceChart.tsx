@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   Area,
   Bar,
@@ -17,10 +18,30 @@ import type { SeriesPoint } from "@/db/queries";
 import { formatCompact, formatDayMonth, formatPercent, formatPrice } from "@/lib/format";
 
 const SERIES = [
-  { key: "close", label: "Close", color: "var(--color-ink)", width: 2 },
-  { key: "ma20", label: "MA 20", color: "var(--color-series-ma20)", width: 1.5 },
-  { key: "ma50", label: "MA 50", color: "var(--color-series-ma50)", width: 1.5 },
+  {
+    key: "close",
+    label: "Close",
+    color: "var(--color-ink)",
+    width: 2,
+    hint: "The last traded price of each session.",
+  },
+  {
+    key: "ma20",
+    label: "MA 20",
+    color: "var(--color-series-ma20)",
+    width: 1.5,
+    hint: "20-session moving average — the mean close of the previous 20 trading days, about one month. Reacts quickly to a change in direction.",
+  },
+  {
+    key: "ma50",
+    label: "MA 50",
+    color: "var(--color-series-ma50)",
+    width: 1.5,
+    hint: "50-session moving average — the mean close of the previous 50 trading days, about one quarter. Slower, so it reads as the longer trend.",
+  },
 ] as const;
+
+type SeriesKey = (typeof SERIES)[number]["key"];
 
 const AXIS_TICK = { fill: "var(--color-ink-muted)", fontSize: 11, fontFamily: "var(--font-mono)" };
 
@@ -38,8 +59,24 @@ const AXIS_TICK = { fill: "var(--color-ink-muted)", fontSize: 11, fontFamily: "v
  * which of the three series is the subject. Green stays out of this plot
  * entirely: MA-20 orange collapses onto gain green under protanopia (ΔE 4.7),
  * so the two must never share a surface.
+ *
+ * The legend doubles as the series filter: each entry toggles its line, and
+ * "All" restores the full set. Filtering is state rather than a URL parameter
+ * because it changes nothing the server fetched — the same rows are already
+ * here, and the y-axis simply rescales to whatever is left on screen, which is
+ * the point of hiding a series in the first place.
  */
 export function PriceChart({ series, ticker }: { series: SeriesPoint[]; ticker: string }) {
+  const [hidden, setHidden] = useState<SeriesKey[]>([]);
+  const isVisible = (key: SeriesKey) => !hidden.includes(key);
+  const visibleCount = SERIES.length - hidden.length;
+
+  function toggle(key: SeriesKey) {
+    setHidden((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
+    );
+  }
+
   if (series.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-baseline bg-subtle px-6 py-16 text-center">
@@ -64,7 +101,12 @@ export function PriceChart({ series, ticker }: { series: SeriesPoint[]; ticker: 
       <figure className="m-0 rounded-2xl border border-hairline bg-canvas p-5 pb-3">
         <figcaption className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <span className="eyebrow">Close price</span>
-          <Legend />
+          <Legend
+            hidden={hidden}
+            visibleCount={visibleCount}
+            onToggle={toggle}
+            onShowAll={() => setHidden([])}
+          />
         </figcaption>
 
         <div className="h-[360px] w-full">
@@ -99,22 +141,24 @@ export function PriceChart({ series, ticker }: { series: SeriesPoint[]; ticker: 
                 ]}
               />
               <Tooltip
-                content={<PriceTooltip />}
+                content={<PriceTooltip hidden={hidden} />}
                 cursor={{ stroke: "var(--color-baseline)", strokeWidth: 1 }}
                 isAnimationActive={false}
               />
 
-              <Area
-                type="monotone"
-                dataKey="close"
-                stroke="none"
-                fill="url(#closeFill)"
-                isAnimationActive={false}
-                activeDot={false}
-                legendType="none"
-              />
+              {isVisible("close") && (
+                <Area
+                  type="monotone"
+                  dataKey="close"
+                  stroke="none"
+                  fill="url(#closeFill)"
+                  isAnimationActive={false}
+                  activeDot={false}
+                  legendType="none"
+                />
+              )}
 
-              {SERIES.map((s) => (
+              {SERIES.filter((s) => isVisible(s.key)).map((s) => (
                 <Line
                   key={s.key}
                   type="monotone"
@@ -177,19 +221,76 @@ export function PriceChart({ series, ticker }: { series: SeriesPoint[]; ticker: 
   );
 }
 
-function Legend() {
+/**
+ * Legend and filter in one control.
+ *
+ * A separate filter row would repeat the three labels and their colours
+ * immediately below the legend that already carries them, so the legend itself
+ * takes the click. The last visible series cannot be switched off — an empty
+ * plot is never what someone was reaching for, and blocking it up front beats
+ * rendering a blank axis they then have to undo.
+ */
+function Legend({
+  hidden,
+  visibleCount,
+  onToggle,
+  onShowAll,
+}: {
+  hidden: SeriesKey[];
+  visibleCount: number;
+  onToggle: (key: SeriesKey) => void;
+  onShowAll: () => void;
+}) {
   return (
-    <ul className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs" aria-label="Chart series">
-      {SERIES.map((s) => (
-        <li key={s.key} className="flex items-center gap-2 text-ink-secondary">
-          <span
-            aria-hidden="true"
-            className="inline-block w-5 rounded-full"
-            style={{ backgroundColor: s.color, height: s.width }}
-          />
-          <span className="num">{s.label}</span>
-        </li>
-      ))}
+    <ul className="flex flex-wrap items-center gap-x-2 gap-y-2 text-xs" aria-label="Chart series">
+      {SERIES.map((s) => {
+        const shown = !hidden.includes(s.key);
+        const isLastShown = shown && visibleCount === 1;
+
+        return (
+          <li key={s.key}>
+            <button
+              type="button"
+              onClick={() => onToggle(s.key)}
+              disabled={isLastShown}
+              aria-pressed={shown}
+              title={
+                isLastShown
+                  ? `${s.hint} (at least one series stays on the chart)`
+                  : `${s.hint} Click to ${shown ? "hide" : "show"}.`
+              }
+              className={`flex items-center gap-2 rounded-full border px-2.5 py-1 transition-colors focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-default ${
+                shown
+                  ? "border-hairline text-ink-secondary hover:bg-subtle"
+                  : "border-transparent text-ink-muted line-through decoration-ink-muted/50 hover:text-ink-secondary"
+              }`}
+            >
+              <span
+                aria-hidden="true"
+                className="inline-block w-5 rounded-full transition-opacity"
+                style={{
+                  backgroundColor: s.color,
+                  height: s.width,
+                  opacity: shown ? 1 : 0.3,
+                }}
+              />
+              <span className="num">{s.label}</span>
+            </button>
+          </li>
+        );
+      })}
+
+      <li>
+        <button
+          type="button"
+          onClick={onShowAll}
+          disabled={hidden.length === 0}
+          title="Show every series"
+          className="rounded-full border border-transparent px-2.5 py-1 text-ink-muted transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-default disabled:opacity-40 disabled:hover:text-ink-muted"
+        >
+          All
+        </button>
+      </li>
     </ul>
   );
 }
@@ -203,20 +304,33 @@ type TooltipProps = {
 const TOOLTIP_SHELL =
   "rounded-xl border border-hairline bg-canvas px-3.5 py-2.5 text-xs shadow-[0_8px_24px_rgba(10,10,10,0.10)]";
 
-function PriceTooltip({ active, payload }: TooltipProps) {
+/**
+ * Hidden series drop out of the tooltip too. Reading off a value for a line
+ * that is not on the plot is the opposite of what filtering was for; OHLC and
+ * the daily return stay, since they belong to the session rather than to any
+ * one drawn series.
+ */
+function PriceTooltip({ active, payload, hidden = [] }: TooltipProps & { hidden?: SeriesKey[] }) {
   if (!active || !payload || payload.length === 0) return null;
   const point = payload[0].payload;
+  const shows = (key: SeriesKey) => !hidden.includes(key);
 
   return (
     <div className={TOOLTIP_SHELL}>
       <p className="num mb-2 font-medium text-ink">{point.date}</p>
       <dl className="grid grid-cols-[auto_auto] gap-x-5 gap-y-1">
-        <Row label="Close" value={formatPrice(point.close)} color="var(--color-ink)" />
+        {shows("close") && (
+          <Row label="Close" value={formatPrice(point.close)} color="var(--color-ink)" />
+        )}
         <Row label="Open" value={formatPrice(point.open)} />
         <Row label="High" value={formatPrice(point.high)} />
         <Row label="Low" value={formatPrice(point.low)} />
-        <Row label="MA 20" value={formatPrice(point.ma20)} color="var(--color-series-ma20)" />
-        <Row label="MA 50" value={formatPrice(point.ma50)} color="var(--color-series-ma50)" />
+        {shows("ma20") && (
+          <Row label="MA 20" value={formatPrice(point.ma20)} color="var(--color-series-ma20)" />
+        )}
+        {shows("ma50") && (
+          <Row label="MA 50" value={formatPrice(point.ma50)} color="var(--color-series-ma50)" />
+        )}
         <Row label="Return" value={formatPercent(point.dailyReturn)} />
       </dl>
     </div>

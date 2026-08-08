@@ -1,6 +1,6 @@
 import type { ForecastRecord, ForecastRow } from "@/db/queries";
 import { Delta } from "@/components/Delta";
-import { formatDayMonth, formatPercent, formatPrice } from "@/lib/format";
+import { direction, formatDayMonth, formatPercent, formatPrice } from "@/lib/format";
 
 /**
  * The next session's expected range, shown with the record it has earned.
@@ -13,6 +13,16 @@ import { formatDayMonth, formatPercent, formatPrice } from "@/lib/format";
  * and the central estimate is rendered as a tick inside it rather than as a
  * number in display type. Leading with the centre would sell the one part of
  * this that carries almost no information.
+ *
+ * The band panel is tinted gain or loss by that centre, which is in tension
+ * with the rule above and is worth being explicit about: the tint is a *find
+ * me* affordance, not a confidence claim. It answers "which way does the model
+ * lean" at a glance on a page where the reader has already scrolled past four
+ * stat tiles and two charts. What keeps it honest is that nothing else grew to
+ * match — the drift is still capped at a quarter sigma upstream, the centre is
+ * still a tick rather than display type, and the signed delta beside the
+ * midpoint states how small the lean actually is. A reader who takes the colour
+ * as a forecast of direction is contradicted by the two lines under it.
  *
  * **The track record is not optional chrome.** A forecast shown without its
  * realised accuracy is asking to be trusted; shown with it, the reader can
@@ -86,7 +96,15 @@ export function ForecastCard({
   );
 }
 
-/** The band itself, as a rail with the close and the central estimate on it. */
+/**
+ * The band itself, as a rail with the close and the central estimate on it.
+ *
+ * The panel's tint follows the midpoint against the last settled close — the
+ * same quantity the "Drift applied" figure reports — so "rising" here means the
+ * model leans up from where the stock actually closed, not that the whole
+ * interval sits above it. A band that straddles the close, which is the usual
+ * case, still tints; a drift of exactly zero does not.
+ */
 function ForecastBand({ forecast }: { forecast: ForecastRow }) {
   // The rail is padded past the band so the endpoints are not flush with the
   // edge, which would read as "the range is cut off here".
@@ -104,8 +122,13 @@ function ForecastBand({ forecast }: { forecast: ForecastRow }) {
       ? ((forecast.central - forecast.basisClose) / forecast.basisClose) * 100
       : null;
 
+  const lean = direction(centralReturn);
+  const tint = lean === "up" ? "tint-gain" : lean === "down" ? "tint-loss" : "";
+
   return (
-    <div className="px-6 py-6">
+    // No rounding and no border: the panel is a middle slice of the card, and
+    // the header above and the track record below already sit on hairlines.
+    <div className={`px-6 py-6 ${tint}`}>
       <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
         <div>
           <p className="num-hero text-2xl font-medium text-ink">
@@ -118,11 +141,14 @@ function ForecastBand({ forecast }: { forecast: ForecastRow }) {
         </div>
         <div className="ml-auto text-right">
           <p className="eyebrow">Midpoint</p>
-          <p className="num mt-1 text-sm font-medium text-ink">
-            {formatPrice(forecast.central)}{" "}
-            {centralReturn !== null && (
-              <span className="text-ink-muted">({formatPercent(centralReturn)})</span>
-            )}
+          {/*
+            The tint's non-colour twin. It was a muted parenthetical before the
+            panel carried a colour; now that the surface says "up", the arrow
+            and sign have to say it too for anyone the colour does not reach.
+          */}
+          <p className="num mt-1 flex items-baseline justify-end gap-2 text-sm font-medium text-ink">
+            <span>{formatPrice(forecast.central)}</span>
+            {centralReturn !== null && <Delta value={centralReturn} className="text-xs" />}
           </p>
         </div>
       </div>

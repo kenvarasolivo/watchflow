@@ -1,15 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { Delta } from "@/components/Delta";
-import { PerformanceBars } from "@/components/PerformanceBars";
+import { PerformanceExplorer } from "@/components/PerformanceExplorer";
 import { PipelineBadge } from "@/components/PipelineBadge";
 import { RangeTabs } from "@/components/RangeTabs";
 import { SetupNotice } from "@/components/SetupNotice";
 import { StatTile } from "@/components/StatTile";
 import { getLatestPipelineRun, getWatchlistPerformance } from "@/db/queries";
 import { companyName } from "@/lib/companies";
-import { formatPercent, formatPrice } from "@/lib/format";
+import { formatPercent } from "@/lib/format";
 import { RANGE_LABELS, parseRange, rangeDays } from "@/lib/range";
 
 export const dynamic = "force-dynamic";
@@ -98,85 +97,11 @@ export default async function PerformancePage({
             />
           </div>
 
-          <PerformanceBars rows={rows} range={range} />
-
-          <div className="overflow-x-auto rounded-2xl border border-hairline bg-canvas">
-            <table className="w-full min-w-[820px] border-collapse text-sm">
-              <caption className="sr-only">
-                Ranked watchlist performance over the {RANGE_LABELS[range]} window.
-              </caption>
-              <thead>
-                <tr className="border-b border-hairline text-left text-[0.6875rem] tracking-[0.14em] text-ink-muted uppercase">
-                  <th scope="col" className="px-5 py-3.5 font-medium">#</th>
-                  <th scope="col" className="px-5 py-3.5 font-medium">Ticker</th>
-                  <th scope="col" className="px-5 py-3.5 text-right font-medium">Return</th>
-                  <th scope="col" className="px-5 py-3.5 text-right font-medium">Start</th>
-                  <th scope="col" className="px-5 py-3.5 text-right font-medium">Latest</th>
-                  <th scope="col" className="px-5 py-3.5 text-right font-medium">Vol 30d</th>
-                  <th scope="col" className="px-5 py-3.5 text-right font-medium">Sessions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row, index) => {
-                  const name = companyName(row.ticker, row.name);
-
-                  return (
-                    <tr
-                      key={row.ticker}
-                      className="border-b border-grid transition-colors last:border-b-0 hover:bg-subtle"
-                    >
-                      <td className="num px-5 py-3.5 text-ink-muted">{index + 1}</td>
-                      <th scope="row" className="px-5 py-3.5 text-left font-normal">
-                        <Link
-                          href={`/ticker/${encodeURIComponent(row.ticker)}`}
-                          className="group inline-flex flex-col rounded focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 focus-visible:outline-none"
-                        >
-                          <span className="num font-medium tracking-wide text-ink transition-colors group-hover:text-leaf">
-                            {row.ticker}
-                          </span>
-                          {name && (
-                            <span
-                              title={name}
-                              className="mt-0.5 max-w-[16rem] truncate text-xs text-ink-muted"
-                            >
-                              {name}
-                            </span>
-                          )}
-                        </Link>
-                      </th>
-                      <td className="px-5 py-3.5 text-right">
-                        {row.returnPct === null ? (
-                          <span className="text-xs text-ink-muted">no data</span>
-                        ) : (
-                          <Delta value={row.returnPct} />
-                        )}
-                      </td>
-                      <td className="num px-5 py-3.5 text-right text-ink-secondary">
-                        {formatPrice(row.firstClose)}
-                      </td>
-                      <td className="num px-5 py-3.5 text-right font-medium text-ink">
-                        {formatPrice(row.lastClose)}
-                      </td>
-                      <td className="num px-5 py-3.5 text-right text-ink-secondary">
-                        {formatPercent(row.volatility30d, { signed: false })}
-                      </td>
-                      <td className="num px-5 py-3.5 text-right text-ink-secondary">
-                        {row.observations}
-                        {row.observations > 0 && row.observations < expectedSessions && (
-                          <span
-                            className="ml-2 rounded-full bg-series-ma20/10 px-2 py-0.5 text-[0.6875rem] text-series-ma20"
-                            title={`Only ${row.observations} sessions in a ${RANGE_LABELS[range]} window — this ticker has a shorter history than the range.`}
-                          >
-                            partial
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <PerformanceExplorer
+            rows={rows}
+            range={range}
+            expectedSessions={expectedSessions}
+          />
         </>
       )}
     </div>
